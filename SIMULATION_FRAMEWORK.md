@@ -278,6 +278,14 @@ Core axes:
 These should not be shown as bars to the player.
 They are interpretation layers for the Signal.
 
+## Profiles And Residues
+
+Simulations are also where profiles become residues.
+
+Repeated meaningful behavior inside simulations can be distilled into reusable patterns that later manifest in other scenarios.
+
+See [PROFILES_RESIDUES.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\PROFILES_RESIDUES.md).
+
 ## Case File Logic
 
 Every meaningful simulation should generate or update a case.

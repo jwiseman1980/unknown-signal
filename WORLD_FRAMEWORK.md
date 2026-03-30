@@ -144,6 +144,12 @@ Primary contribution lanes:
 
 See [CONTRIBUTOR_BIBLE.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\CONTRIBUTOR_BIBLE.md) for contribution boundaries.
 
+## Residual Population
+
+The world can later be populated not only by authored NPCs or live players, but by manifestations built from real player residues.
+
+See [PROFILES_RESIDUES.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\PROFILES_RESIDUES.md).
+
 ## MVP Direction
 
 The smallest strong version includes:
