@@ -55,3 +55,4 @@ Dev mode includes:
 - See [SIMULATION_FRAMEWORK.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\SIMULATION_FRAMEWORK.md) and [CASE_MODEL.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\CASE_MODEL.md) for the core gameplay structure.
 - See [PROFILES_RESIDUES.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\PROFILES_RESIDUES.md) for the player-pattern persistence model.
 - See [DEPLOY.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\DEPLOY.md) for local hosting and public deployment options.
+- See [BACKEND.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\BACKEND.md) for the persistent backend path.

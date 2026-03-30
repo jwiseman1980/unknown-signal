@@ -14,6 +14,9 @@ const inviteMessage = document.querySelector("#inviteMessage");
 const sharePreview = document.querySelector("#sharePreview");
 const contactIdValue = document.querySelector("#contactIdValue");
 const casePreview = document.querySelector("#casePreview");
+const exportJson = document.querySelector("#exportJson");
+const exportText = document.querySelector("#exportText");
+const sessionPreview = document.querySelector("#sessionPreview");
 const devPanel = document.querySelector("#devPanel");
 const idleIndicator = document.querySelector("#idleIndicator");
 const attentionValue = document.querySelector("#attentionValue");
@@ -24,6 +27,7 @@ const transitionCopy = document.querySelector("#transitionCopy");
 const placeMe = document.querySelector("#placeMe");
 const undertowPanel = document.querySelector("#undertowPanel");
 const undertowSummary = document.querySelector("#undertowSummary");
+const API_BASE = "/api";
 
 const state = {
   messages: [],
@@ -39,7 +43,13 @@ const state = {
   activeSimulation: null,
   triageCompleted: false,
   storageKey: "unknown-signal-memory-v1",
+  tokenStorageKey: "unknown-signal-contact-token-v1",
   memory: null,
+  currentSession: null,
+  remote: {
+    available: false,
+    checked: false,
+  },
   traits: {
     guarded: 0,
     confessional: 0,
@@ -106,6 +116,7 @@ function boot() {
   if (state.memory.contactAssigned) {
     state.memory.sessions += 1;
   }
+  state.currentSession = createSessionRecord();
   inviteMessage.textContent = state.invitationSeed;
   signalInput.value = state.invitationSeed;
   contactMode.value = state.mode;
@@ -115,8 +126,10 @@ function boot() {
   syncShareTargets();
   updateInsights();
   updateMemoryPreview();
+  updateSessionPreview();
   persistMemory();
   setupSpeechRecognition();
+  initializeRemoteContact();
   queueIntro();
 }
 
@@ -184,6 +197,14 @@ shareInvite.addEventListener("click", async () => {
   }
 
   await writeClipboard(message);
+});
+
+exportJson.addEventListener("click", () => {
+  downloadSession("json");
+});
+
+exportText.addEventListener("click", () => {
+  downloadSession("txt");
 });
 
 updateSignal.addEventListener("click", () => {
@@ -272,6 +293,7 @@ function submitInput(text, fromVoice) {
 
 function addMessage(role, text) {
   state.messages.push({ role, text });
+  recordSessionEvent(role, text);
 
   const message = document.createElement("article");
   message.className = `message message--${role}`;
@@ -443,6 +465,7 @@ function updateInsights() {
   profileValue.textContent = describeProfile();
   persistMemory();
   updateMemoryPreview();
+  updateSessionPreview();
 }
 
 function describePattern() {
@@ -860,6 +883,7 @@ function loadMemory() {
     selfLabel: "",
     exchanges: [],
     cases: [],
+    sessionRecords: [],
   };
 
   try {
@@ -874,6 +898,9 @@ function loadMemory() {
       ...parsed,
       exchanges: Array.isArray(parsed.exchanges) ? parsed.exchanges : [],
       cases: Array.isArray(parsed.cases) ? parsed.cases : [],
+      sessionRecords: Array.isArray(parsed.sessionRecords)
+        ? parsed.sessionRecords
+        : [],
     };
   } catch (error) {
     return fallback;
@@ -887,6 +914,21 @@ function persistMemory() {
 
   state.memory.lastPattern = describePattern();
   state.memory.lastInvite = state.invitationSeed;
+  state.memory.currentSessionId = state.currentSession?.id || "";
+
+  if (state.currentSession) {
+    const existingIndex = state.memory.sessionRecords.findIndex(
+      (item) => item.id === state.currentSession.id
+    );
+
+    if (existingIndex >= 0) {
+      state.memory.sessionRecords[existingIndex] = state.currentSession;
+    } else {
+      state.memory.sessionRecords.unshift(state.currentSession);
+    }
+
+    state.memory.sessionRecords = state.memory.sessionRecords.slice(0, 12);
+  }
 
   try {
     window.localStorage.setItem(state.storageKey, JSON.stringify(state.memory));
@@ -944,6 +986,7 @@ function recordExchange(text) {
   }
 
   persistMemory();
+  syncSessionRemote();
 }
 
 function createCase(title, summary) {
@@ -986,4 +1029,176 @@ function updateMemoryPreview() {
   casePreview.textContent = state.memory.cases
     .map((item) => `${item.id} // ${item.title}\n${item.summary}`)
     .join("\n\n");
+}
+
+function createSessionRecord() {
+  return {
+    id: `SESSION-${Date.now()}`,
+    startedAt: new Date().toISOString(),
+    contactId: state.memory?.contactId || "",
+    contactToken: getOrCreateContactToken(),
+    selfLabel: state.memory?.selfLabel || "",
+    invite: state.invitationSeed,
+    mode: state.mode,
+    channel: state.channel,
+    events: [],
+  };
+}
+
+function recordSessionEvent(role, text) {
+  if (!state.currentSession) {
+    return;
+  }
+
+  state.currentSession.contactId = state.memory?.contactId || "";
+  state.currentSession.selfLabel = state.memory?.selfLabel || "";
+  state.currentSession.lastPattern = describePattern();
+  state.currentSession.events.push({
+    at: new Date().toISOString(),
+    role,
+    text,
+  });
+  state.currentSession.events = state.currentSession.events.slice(-120);
+  persistMemory();
+  updateSessionPreview();
+  syncSessionRemote();
+}
+
+function updateSessionPreview() {
+  if (!state.currentSession || state.currentSession.events.length === 0) {
+    sessionPreview.textContent = "No session events yet.";
+    return;
+  }
+
+  const recent = state.currentSession.events.slice(-6);
+  sessionPreview.textContent = recent
+    .map((event) => `${event.role.toUpperCase()} // ${event.text}`)
+    .join("\n\n");
+}
+
+function downloadSession(kind) {
+  if (!state.currentSession) {
+    return;
+  }
+
+  const baseName = `${state.currentSession.id.toLowerCase()}`;
+  let content = "";
+  let filename = "";
+  let mime = "";
+
+  if (kind === "json") {
+    content = JSON.stringify(state.currentSession, null, 2);
+    filename = `${baseName}.json`;
+    mime = "application/json";
+  } else {
+    content = buildTranscriptText();
+    filename = `${baseName}.txt`;
+    mime = "text/plain";
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildTranscriptText() {
+  const header = [
+    `Session: ${state.currentSession.id}`,
+    `Started: ${state.currentSession.startedAt}`,
+    `Contact: ${state.memory?.contactId || "Unassigned"}`,
+    `Self-label: ${state.memory?.selfLabel || "None"}`,
+    `Mode: ${state.mode}`,
+    `Channel: ${state.channel}`,
+    `Pattern: ${describePattern()}`,
+    "",
+  ];
+
+  const body = state.currentSession.events.map(
+    (event) => `[${event.at}] ${event.role.toUpperCase()}: ${event.text}`
+  );
+
+  return [...header, ...body].join("\n");
+}
+
+function getOrCreateContactToken() {
+  try {
+    const existing = window.localStorage.getItem(state.tokenStorageKey);
+    if (existing) {
+      return existing;
+    }
+
+    const created =
+      window.crypto?.randomUUID?.() ||
+      `token-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    window.localStorage.setItem(state.tokenStorageKey, created);
+    return created;
+  } catch (error) {
+    return `token-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  }
+}
+
+async function initializeRemoteContact() {
+  const token = getOrCreateContactToken();
+
+  try {
+    const response = await fetch(`${API_BASE}/contact`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contactToken: token,
+        selfLabel: state.memory?.selfLabel || "",
+      }),
+    });
+
+    if (!response.ok) {
+      state.remote.checked = true;
+      return;
+    }
+
+    const data = await response.json();
+    if (!data?.ok || !data.contactId) {
+      state.remote.checked = true;
+      return;
+    }
+
+    state.remote.available = true;
+    state.remote.checked = true;
+    state.memory.contactAssigned = true;
+    state.memory.contactId = data.contactId;
+    state.memory.sessions = data.sessions || state.memory.sessions || 1;
+    persistMemory();
+    updateMemoryPreview();
+  } catch (error) {
+    state.remote.checked = true;
+  }
+}
+
+async function syncSessionRemote() {
+  if (!state.remote.available || !state.currentSession) {
+    return;
+  }
+
+  try {
+    await fetch(`${API_BASE}/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contactToken: getOrCreateContactToken(),
+        session: state.currentSession,
+      }),
+      keepalive: true,
+    });
+  } catch (error) {
+    // Local-first prototype: ignore remote sync failures.
+  }
 }
