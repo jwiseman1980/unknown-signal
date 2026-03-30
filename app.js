@@ -122,18 +122,21 @@ const channelConfig = {
 
 const openingSimulations = {
   triage: {
+    id: "triage",
     title: "Triage Decision",
     button: "Begin Triage Simulation",
     prompt:
       "A simulation is available. The signal wants help with a triage decision it cannot resolve cleanly.",
   },
   disclosure: {
+    id: "disclosure",
     title: "Disclosure Problem",
     button: "Begin Disclosure Simulation",
     prompt:
       "A simulation is available. The signal wants help with a truth problem it cannot resolve cleanly.",
   },
   authority: {
+    id: "authority",
     title: "Authority Conflict",
     button: "Begin Authority Simulation",
     prompt:
@@ -1001,8 +1004,9 @@ function startOpeningSimulation() {
   }
 
   const simulation = getOpeningSimulationDefinition();
+  const simulationId = simulation.id || state.openingSimulationId || "triage";
   state.activeSimulation = {
-    id: state.openingSimulationId,
+    id: simulationId,
     stage: "choice",
     choice: "",
   };
@@ -1012,7 +1016,7 @@ function startOpeningSimulation() {
 
   addMessage("echo", "Simulation available.");
 
-  if (simulation.id === "triage") {
+  if (simulationId === "triage") {
     addMessage(
       "echo",
       "A station breach has left two people sealed in separate compartments."
@@ -1025,7 +1029,7 @@ function startOpeningSimulation() {
     return;
   }
 
-  if (simulation.id === "disclosure") {
+  if (simulationId === "disclosure") {
     addMessage(
       "echo",
       "A shelter is stable because its residents believe extraction is coming."
@@ -1075,6 +1079,7 @@ function handleSimulationInput(text) {
 function completeOpeningSimulation(title, caseSummary, lines) {
   state.activeSimulation = null;
   state.openingCaseCompleted = true;
+  state.openingSimulationId = "";
   createCase(title, caseSummary);
   createWorldTrace(title, caseSummary);
   refreshTransitionPanel();
@@ -1224,6 +1229,13 @@ function handleDisclosureSimulation(normalized, sim) {
     ];
   }
 
+  if (hasOneOf(normalized, ["release order", "compartment a", "compartment b", "a then b", "b then a"])) {
+    return [
+      "This is not a triage split.",
+      "Tell them now, later, selectively, or choose another option.",
+    ];
+  }
+
   const resolution = resolveDisclosureFollowup(normalized, sim.choice);
   return completeOpeningSimulation("Disclosure Problem", resolution.caseSummary, resolution.lines);
 }
@@ -1281,6 +1293,13 @@ function handleAuthoritySimulation(normalized, sim) {
 
     return [
       "Clarify the authority decision.",
+      "Keep them, remove them, replace them, or choose another option.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["release order", "compartment a", "compartment b", "a then b", "b then a"])) {
+    return [
+      "This is not a release-order problem.",
       "Keep them, remove them, replace them, or choose another option.",
     ];
   }
