@@ -56,6 +56,8 @@ const state = {
   sceneState: {
     dividerOpened: false,
     medkitTaken: false,
+    medkitOpened: false,
+    maraStabilized: false,
     mapChecked: false,
     doorChecked: false,
     safeRouteKnown: false,
@@ -542,6 +544,29 @@ function classifyInput(text) {
 function buildEchoReply(text, fromVoice) {
   const normalized = text.toLowerCase();
   const replies = [];
+
+  if (
+    !state.openingCaseCompleted &&
+    !state.activeSimulation &&
+    !state.currentScene &&
+    state.interactionCount >= 4 &&
+    hasOneOf(normalized, [
+      "what now",
+      "what do i do",
+      "what am i supposed to do",
+      "so lets go to the city",
+      "let's go to the city",
+      "lets go to the city",
+      "go to the city",
+      "take me to the city",
+      "get me there",
+      "continue",
+      "okay contact",
+    ])
+  ) {
+    startOpeningSimulation();
+    return [];
+  }
 
   if (
     state.openingCaseCompleted &&
@@ -1605,9 +1630,23 @@ function handleUndertowInput(text) {
   }
 
   if (hasOneOf(normalized, ["what do i do", "what next", "help", "options", "what can i do"])) {
+    const practical = [];
+    if (!state.sceneState.dividerOpened) {
+      practical.push("Open the divider");
+    }
+    if (!state.sceneState.medkitTaken) {
+      practical.push("Take the medkit");
+    }
+    if (state.sceneState.medkitTaken && !state.sceneState.medkitOpened) {
+      practical.push("Open the medkit");
+    }
+    if (state.sceneState.dividerOpened && state.sceneState.medkitOpened && !state.sceneState.maraStabilized) {
+      practical.push("Treat Mara");
+    }
+    practical.push("Inspect the door", "Check the map");
     return [
       "Immediate options remain limited and unpleasant.",
-      "Inspect the door. Open the divider. Take the medkit. Check the map.",
+      `${practical.join(". ")}.`,
     ];
   }
 
@@ -1622,6 +1661,13 @@ function handleUndertowInput(text) {
       lines.push(traceLine);
     }
     return lines;
+  }
+
+  if (hasOneOf(normalized, ["open it", "open door", "unseal door", "unlock door", "lets open it", "let's open it"])) {
+    return [
+      "The clinic door stays sealed.",
+      "Whatever is scraping outside sounds content to let you make the first mistake.",
+    ];
   }
 
   if (hasOneOf(normalized, ["divider", "open divider", "behind divider", "check divider"])) {
@@ -1641,6 +1687,28 @@ function handleUndertowInput(text) {
     return [
       "You take the medkit from the wall.",
       "The latch is intact. The supplies inside are probably not complete, but they are better than nothing.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["open medkit", "unseal the kit", "unseal kit", "inspect medkit", "inspect the medkit", "open the medkit", "feel the medkit"])) {
+    if (!state.sceneState.medkitTaken) {
+      return [
+        "The medkit is still mounted to the wall.",
+        "Take it first if you want to know what it can do.",
+      ];
+    }
+
+    if (state.sceneState.medkitOpened) {
+      return [
+        "The kit is already open.",
+        "Bandage packs, sealant foam, pain suppressors, and one injector remain usable.",
+      ];
+    }
+
+    state.sceneState.medkitOpened = true;
+    return [
+      "You crack the latch and open the medkit.",
+      "Inside: sealant foam, bandage wraps, pain suppressors, one injector, and not much margin for error.",
     ];
   }
 
@@ -1664,9 +1732,54 @@ function handleUndertowInput(text) {
   }
 
   if (hasOneOf(normalized, ["talk to mara", "mara"])) {
+    if (state.sceneState.maraStabilized) {
+      return [
+        "Mara flexes her patched shoulder and studies you more carefully now.",
+        "\"Better. Next time, do the useful thing before the dramatic thing.\"",
+      ];
+    }
+
     return [
       "Mara looks at you like you are late and immediately useful.",
       "\"If you can stand, then help. If you can't, stay out of my way.\"",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["help mara", "heal mara", "treat mara", "give her medkit", "give mara the medkit", "patch mara"])) {
+    if (!state.sceneState.dividerOpened) {
+      return [
+        "You need to get behind the divider first.",
+        "Mara is not going to let you practice medicine through plastic.",
+      ];
+    }
+
+    if (!state.sceneState.medkitTaken) {
+      return [
+        "You need the medkit first.",
+        "Mara's expression suggests she already knew that.",
+      ];
+    }
+
+    if (!state.sceneState.medkitOpened) {
+      return [
+        "The kit is still sealed.",
+        "Open it before you try to help anyone.",
+      ];
+    }
+
+    if (state.sceneState.maraStabilized) {
+      return [
+        "Mara is already patched as well as this room will allow.",
+        "\"Save the rest for when the city gets worse,\" she says.",
+      ];
+    }
+
+    state.sceneState.maraStabilized = true;
+    createCase("Mara Stabilized", "Clinic treatment completed under pressure");
+    return [
+      "You hand Mara the open kit and help her seal the wound.",
+      "She works fast, angry, and precisely. Blood loss slows. Her breathing evens out.",
+      "\"Good,\" Mara says. \"Now you're allowed to be useful somewhere else.\"",
     ];
   }
 
@@ -1789,6 +1902,13 @@ function handleRelayInput(text) {
       ...spawnStoryThread("relay-terminal"),
     ];
     return lines;
+  }
+
+  if (hasOneOf(normalized, ["use route", "follow route", "follow the route", "route", "missing contact trail"])) {
+    return [
+      "The route does not resolve into a clean doorway here.",
+      "It keeps bending deeper into Undertow, toward the service junction and whatever old session logic is still running beyond it.",
+    ];
   }
 
   if (hasOneOf(normalized, ["what do i do", "help", "options", "what next"])) {
@@ -1937,11 +2057,32 @@ function handlePlatformInput(text) {
     ];
   }
 
+  if (hasOneOf(normalized, ["manifest", "evac manifest", "passenger list", "destination board"])) {
+    return [
+      "The manifest is corrupted, but one occupied compartment keeps reasserting itself against the blank spaces.",
+      "The entry is anchored to a session marker, not a passenger name.",
+    ];
+  }
+
   if (hasOneOf(normalized, ["rails", "check rails", "water"])) {
     return [
       "The rails pulse with residual current. Not enough to kill immediately. Enough to teach caution.",
       "Someone crossed here recently anyway.",
       ...spawnStoryThread("platform-rails"),
+    ];
+  }
+
+  if (hasOneOf(normalized, ["use train", "board train", "enter train", "resolve compartment", "open compartment", "occupied compartment"])) {
+    return [
+      "The carriage door will not cycle from here.",
+      "If the unresolved compartment is real, the platform is only the symptom. The route points deeper toward quarantine.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["district", "the district", "what district"])) {
+    return [
+      "Undertow is only one district.",
+      "The platform is where this district starts remembering what older sessions taught it to keep moving.",
     ];
   }
 
