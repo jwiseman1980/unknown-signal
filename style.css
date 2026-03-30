@@ -18,7 +18,8 @@
 html,
 body {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
   background:
     radial-gradient(circle at top, rgba(21, 54, 32, 0.15), transparent 32%),
     linear-gradient(180deg, #010201 0%, #050605 50%, #020302 100%);
@@ -48,11 +49,13 @@ body::before {
 }
 
 .terminal-shell {
-  min-height: 100vh;
+  height: 100dvh;
   display: grid;
-  place-items: center;
+  align-content: center;
+  justify-items: center;
   gap: 18px;
   padding: 24px 16px;
+  overflow: hidden;
 }
 
 .terminal-window,
@@ -65,15 +68,18 @@ body::before {
 }
 
 .terminal-window {
-  min-height: min(86vh, 860px);
+  height: min(86dvh, 860px);
   padding: 28px 24px;
   display: grid;
-  align-content: start;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
   gap: 20px;
+  overflow: hidden;
 }
 
 .dev-panel {
+  max-height: min(86dvh, 860px);
   padding: 20px;
+  overflow: auto;
 }
 
 .terminal-topbar {
@@ -177,7 +183,7 @@ h2 {
 }
 
 .conversation {
-  min-height: min(60vh, 560px);
+  min-height: 0;
   overflow: auto;
   display: grid;
   gap: 18px;
@@ -353,6 +359,7 @@ select:focus-visible {
 
 @media (max-width: 720px) {
   .terminal-shell {
+    height: 100dvh;
     padding: 0;
     gap: 0;
   }
@@ -360,14 +367,15 @@ select:focus-visible {
   .terminal-window,
   .dev-panel {
     width: 100%;
-    min-height: 100dvh;
+    height: 100dvh;
+    max-height: 100dvh;
     padding: 16px;
     border-left: none;
     border-right: none;
   }
 
   .conversation {
-    min-height: calc(100dvh - 380px);
+    min-height: 0;
   }
 
   .composer {
