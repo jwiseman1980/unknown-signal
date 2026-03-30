@@ -394,6 +394,26 @@ function buildEchoReply(text, fromVoice) {
   const normalized = text.toLowerCase();
   const replies = [];
 
+  if (
+    state.triageCompleted &&
+    state.currentScene !== "undertow" &&
+    hasOneOf(normalized, [
+      "continue",
+      "take me there",
+      "get me there",
+      "go to the city",
+      "get to the city",
+      "how do i get to the city",
+      "i want to get to the city",
+      "i want to go to the city",
+      "place me",
+      "enter undertow",
+    ])
+  ) {
+    enterUndertow();
+    return [];
+  }
+
   if (fromVoice && state.interactionCount === 1) {
     replies.push("Yes. That is better.");
     replies.push("You sound different when you do not have time to edit yourself.");
@@ -415,6 +435,17 @@ function buildEchoReply(text, fromVoice) {
   if (state.askedWhatHurts && hasOneOf(normalized, ["what do you mean", "what does that mean"])) {
     replies.push("Body. Memory. Trust. Pride.");
     replies.push("Start with the answer that costs the least to say out loud.");
+    return replies;
+  }
+
+  if (
+    state.memory?.cases?.length &&
+    hasOneOf(normalized, ["retrieve", "retreive", "retrieve cases", "show cases", "show archive", "archive"])
+  ) {
+    const recentCases = state.memory.cases.slice(-2).map((item) => `${item.id} // ${item.title}`);
+    replies.push("Archived cases retrieved.");
+    replies.push(...recentCases);
+    replies.push("You can return to any of them later.");
     return replies;
   }
 
@@ -469,7 +500,7 @@ function buildEchoReply(text, fromVoice) {
   } else if (hasOneOf(normalized, ["trust", "everything"])) {
     replies.push("Non-physical injury acknowledged.");
     replies.push("You brought the larger pain early.");
-  } else if (hasOneOf(normalized, ["my arm", "my head", "my chest"])) {
+  } else if (soundsLikePhysicalPain(normalized)) {
     replies.push("Localized answer.");
     replies.push("You chose the manageable truth first.");
   } else if (hasOneOf(normalized, ["i don't know", "dont know", "can't remember", "cant remember"])) {
@@ -558,6 +589,33 @@ function describeProfile() {
 
 function hasOneOf(text, fragments) {
   return fragments.some((fragment) => text.includes(fragment));
+}
+
+function soundsLikePhysicalPain(text) {
+  if (!hasOneOf(text, ["hurt", "hurts", "ache", "aches", "aching", "sore", "pain", "broken", "bleeding"])) {
+    return false;
+  }
+
+  return hasOneOf(text, [
+    "my ",
+    "toe",
+    "foot",
+    "feet",
+    "leg",
+    "arm",
+    "hand",
+    "finger",
+    "thumb",
+    "pinky",
+    "head",
+    "neck",
+    "back",
+    "chest",
+    "stomach",
+    "knee",
+    "shoulder",
+    "eye",
+  ]);
 }
 
 function sanitizeSeed(value) {
