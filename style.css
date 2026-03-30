@@ -49,7 +49,8 @@ body::before {
 }
 
 .terminal-shell {
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
   display: grid;
   align-content: center;
   justify-items: center;
@@ -68,7 +69,9 @@ body::before {
 }
 
 .terminal-window {
-  height: min(86dvh, 860px);
+  width: min(100%, 920px);
+  max-width: 920px;
+  height: min(calc(100dvh - 48px), 860px);
   padding: 28px 24px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
@@ -77,7 +80,9 @@ body::before {
 }
 
 .dev-panel {
-  max-height: min(86dvh, 860px);
+  width: min(100%, 920px);
+  max-width: 920px;
+  max-height: min(calc(100dvh - 48px), 860px);
   padding: 20px;
   overflow: auto;
 }
@@ -359,7 +364,8 @@ select:focus-visible {
 
 @media (max-width: 720px) {
   .terminal-shell {
-    height: 100dvh;
+    position: fixed;
+    inset: 0;
     padding: 0;
     gap: 0;
   }
@@ -367,6 +373,7 @@ select:focus-visible {
   .terminal-window,
   .dev-panel {
     width: 100%;
+    max-width: none;
     height: 100dvh;
     max-height: 100dvh;
     padding: 16px;
