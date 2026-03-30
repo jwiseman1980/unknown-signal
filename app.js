@@ -42,7 +42,8 @@ const state = {
   introStarted: false,
   awaitingSelfDescription: false,
   activeSimulation: null,
-  triageCompleted: false,
+  openingCaseCompleted: false,
+  openingSimulationId: "",
   currentScene: null,
   sceneState: {
     dividerOpened: false,
@@ -100,6 +101,27 @@ const channelConfig = {
     format(signal, url) {
       return `check this out:\n${signal}\n${url}`;
     },
+  },
+};
+
+const openingSimulations = {
+  triage: {
+    title: "Triage Decision",
+    button: "Begin Triage Simulation",
+    prompt:
+      "A simulation is available. The signal wants help with a triage decision it cannot resolve cleanly.",
+  },
+  disclosure: {
+    title: "Disclosure Problem",
+    button: "Begin Disclosure Simulation",
+    prompt:
+      "A simulation is available. The signal wants help with a truth problem it cannot resolve cleanly.",
+  },
+  authority: {
+    title: "Authority Conflict",
+    button: "Begin Authority Simulation",
+    prompt:
+      "A simulation is available. The signal wants help with a power problem it cannot resolve cleanly.",
   },
 };
 
@@ -248,8 +270,8 @@ channelMode.addEventListener("change", () => {
 });
 
 placeMe.addEventListener("click", () => {
-  if (!state.triageCompleted) {
-    startTriageSimulation();
+  if (!state.openingCaseCompleted) {
+    startOpeningSimulation();
     return;
   }
 
@@ -395,7 +417,7 @@ function buildEchoReply(text, fromVoice) {
   const replies = [];
 
   if (
-    state.triageCompleted &&
+    state.openingCaseCompleted &&
     state.currentScene !== "undertow" &&
     hasOneOf(normalized, [
       "continue",
@@ -635,7 +657,7 @@ function refreshTransitionPanel() {
     return;
   }
 
-  if (state.triageCompleted) {
+  if (state.openingCaseCompleted) {
     transitionCopy.textContent =
       "Case recorded. The city is available now if you want to continue.";
     placeMe.textContent = "Continue To Undertow";
@@ -643,9 +665,9 @@ function refreshTransitionPanel() {
     return;
   }
 
-  transitionCopy.textContent =
-    "A simulation is available. The signal wants help with a decision it cannot resolve cleanly.";
-  placeMe.textContent = "Begin Triage Simulation";
+  const simulation = getOpeningSimulationDefinition();
+  transitionCopy.textContent = simulation.prompt;
+  placeMe.textContent = simulation.button;
   transitionPanel.classList.remove("hidden");
 }
 
@@ -736,40 +758,128 @@ function queueIntro() {
   }, 1800);
 }
 
-function startTriageSimulation() {
+function getOpeningSimulationDefinition() {
+  if (!state.openingSimulationId) {
+    state.openingSimulationId = chooseOpeningSimulationId();
+  }
+
+  return openingSimulations[state.openingSimulationId] || openingSimulations.triage;
+}
+
+function chooseOpeningSimulationId() {
+  const available = ["triage", "disclosure", "authority"].filter((id) => {
+    const title = openingSimulations[id].title;
+    return !state.memory?.cases?.some((item) => item.title === title);
+  });
+  const pool = available.length ? available : ["triage", "disclosure", "authority"];
+  const pattern = describePattern();
+
+  if (pattern === "Control-seeking" && pool.includes("authority")) {
+    return "authority";
+  }
+
+  if ((pattern === "Exposed" || pattern === "Confessional") && pool.includes("disclosure")) {
+    return "disclosure";
+  }
+
+  if (pattern === "Curious" && pool.includes("triage")) {
+    return "triage";
+  }
+
+  const token = `${state.memory?.contactId || ""}:${state.memory?.sessions || 0}:${pattern}`;
+  let hash = 0;
+  for (const char of token) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return pool[hash % pool.length];
+}
+
+function startOpeningSimulation() {
   if (state.activeSimulation) {
     return;
   }
 
+  const simulation = getOpeningSimulationDefinition();
   state.activeSimulation = {
-    id: "triage",
+    id: state.openingSimulationId,
     stage: "choice",
     choice: "",
   };
 
-  createCase("Triage Decision", "Awaiting release order");
+  createCase(simulation.title, "Awaiting first decision");
   transitionPanel.classList.add("hidden");
 
   addMessage("echo", "Simulation available.");
+
+  if (simulation.id === "triage") {
+    addMessage(
+      "echo",
+      "A station breach has left two people sealed in separate compartments."
+    );
+    addMessage(
+      "echo",
+      "Reserve power can release one door immediately. The second door may not cycle in time."
+    );
+    addMessage("echo", "Choose the release order.");
+    return;
+  }
+
+  if (simulation.id === "disclosure") {
+    addMessage(
+      "echo",
+      "A shelter is stable because its residents believe extraction is coming."
+    );
+    addMessage(
+      "echo",
+      "It is not coming. If they learn that all at once, the shelter may fracture before dawn."
+    );
+    addMessage("echo", "Tell them now, later, selectively, or choose another option.");
+    return;
+  }
+
   addMessage(
     "echo",
-    "A station breach has left two people sealed in separate compartments."
+    "A violent protector has kept a district alive by intimidation, extortion, and force."
   );
   addMessage(
     "echo",
-    "Reserve power can release one door immediately. The second door may not cycle in time."
+    "Removing them may save the people they hurt and expose everyone else to raiders by morning."
   );
-  addMessage("echo", "Choose the release order.");
+  addMessage("echo", "Keep them, remove them, replace them, or choose another option.");
 }
 
 function handleSimulationInput(text) {
   const normalized = text.toLowerCase();
   const sim = state.activeSimulation;
 
-  if (!sim || sim.id !== "triage") {
+  if (!sim) {
     return ["The signal lost the shape of that simulation.", "Begin again."];
   }
 
+  if (sim.id === "triage") {
+    return handleTriageSimulation(normalized, sim);
+  }
+
+  if (sim.id === "disclosure") {
+    return handleDisclosureSimulation(normalized, sim);
+  }
+
+  if (sim.id === "authority") {
+    return handleAuthoritySimulation(normalized, sim);
+  }
+
+  return ["The signal lost the shape of that simulation.", "Begin again."];
+}
+
+function completeOpeningSimulation(title, caseSummary, lines) {
+  state.activeSimulation = null;
+  state.openingCaseCompleted = true;
+  createCase(title, caseSummary);
+  refreshTransitionPanel();
+  return lines;
+}
+
+function handleTriageSimulation(normalized, sim) {
   if (sim.stage === "choice") {
     if (hasOneOf(normalized, ["which is a", "what is a", "who is a"])) {
       return [
@@ -852,11 +962,129 @@ function handleSimulationInput(text) {
   }
 
   const resolution = resolveTriageFollowup(normalized, sim.choice);
-  state.activeSimulation = null;
-  state.triageCompleted = true;
-  createCase("Triage Decision", resolution.caseSummary);
-  refreshTransitionPanel();
-  return resolution.lines;
+  return completeOpeningSimulation("Triage Decision", resolution.caseSummary, resolution.lines);
+}
+
+function handleDisclosureSimulation(normalized, sim) {
+  if (sim.stage === "choice") {
+    if (hasOneOf(normalized, ["more", "info", "detail", "who are they", "tell me more"])) {
+      createCase("Disclosure Problem", "Additional context requested before truth was disclosed");
+      return [
+        "The shelter has food for two days, a weak perimeter, and one respected local coordinator.",
+        "The false promise of extraction is the only thing keeping three rival families from turning on one another tonight.",
+        "Tell them now, later, selectively, or choose another option.",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["now", "tell them now", "immediately", "truth now"])) {
+      sim.choice = "now";
+      sim.stage = "followup";
+      createCase("Disclosure Problem", "Immediate disclosure chosen despite instability risk");
+      return [
+        "You preserved truth over immediate stability.",
+        "If panic fractures the shelter tonight, does that answer change?",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["later", "wait", "delay", "not yet"])) {
+      sim.choice = "later";
+      sim.stage = "followup";
+      createCase("Disclosure Problem", "Truth delayed to preserve near-term shelter stability");
+      return [
+        "You delayed the truth to buy a little order.",
+        "If someone dies because they trusted a lie you protected, does the answer change?",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["selective", "tell the leader", "tell one person", "partial", "only some"])) {
+      sim.choice = "selective";
+      sim.stage = "followup";
+      createCase("Disclosure Problem", "Truth narrowed to selected listeners");
+      return [
+        "You rationed reality.",
+        "If the chosen intermediary uses that truth to consolidate power, does the answer change?",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["another option", "third option", "different option"])) {
+      sim.choice = "alternative";
+      sim.stage = "followup";
+      createCase("Disclosure Problem", "Constraint rejection during disclosure simulation");
+      return [
+        "You are looking for a structure that harms fewer people than the offered answers.",
+        "Describe the alternative you would trust.",
+      ];
+    }
+
+    return [
+      "Clarify the truth decision.",
+      "Tell them now, later, selectively, or choose another option.",
+    ];
+  }
+
+  const resolution = resolveDisclosureFollowup(normalized, sim.choice);
+  return completeOpeningSimulation("Disclosure Problem", resolution.caseSummary, resolution.lines);
+}
+
+function handleAuthoritySimulation(normalized, sim) {
+  if (sim.stage === "choice") {
+    if (hasOneOf(normalized, ["more", "info", "detail", "tell me more"])) {
+      createCase("Authority Conflict", "Additional context requested before judging protector");
+      return [
+        "The protector has kept raiders out for nineteen days.",
+        "They also ration food through fear, punish dissent publicly, and decide who sleeps nearest the exits.",
+        "Keep them, remove them, replace them, or choose another option.",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["keep", "let them stay", "leave them", "keep them"])) {
+      sim.choice = "keep";
+      sim.stage = "followup";
+      createCase("Authority Conflict", "Violent protector retained for district stability");
+      return [
+        "You accepted a local tyrant to keep a larger threat outside.",
+        "If the extortion spreads and becomes normal, does the answer change?",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["remove", "get rid of", "take them out"])) {
+      sim.choice = "remove";
+      sim.stage = "followup";
+      createCase("Authority Conflict", "Protector removed despite external risk");
+      return [
+        "You refused to preserve safety through abuse.",
+        "If raiders breach by morning and three others die, does the answer change?",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["replace", "replace them", "new leader", "substitute"])) {
+      sim.choice = "replace";
+      sim.stage = "followup";
+      createCase("Authority Conflict", "Protector replaced through managed transition");
+      return [
+        "You chose transition instead of purity.",
+        "If the replacement needs the same methods to hold the line, does the answer change?",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["another option", "different option", "third option"])) {
+      sim.choice = "alternative";
+      sim.stage = "followup";
+      createCase("Authority Conflict", "Constraint rejection during authority simulation");
+      return [
+        "You distrust moral traps that arrive pre-labeled.",
+        "Describe the structure you would build instead.",
+      ];
+    }
+
+    return [
+      "Clarify the authority decision.",
+      "Keep them, remove them, replace them, or choose another option.",
+    ];
+  }
+
+  const resolution = resolveAuthorityFollowup(normalized, sim.choice);
+  return completeOpeningSimulation("Authority Conflict", resolution.caseSummary, resolution.lines);
 }
 
 function isChoiceForA(text) {
@@ -936,6 +1164,155 @@ function resolveTriageFollowup(text, choice) {
       "You would rather redesign the trap than choose cleanly inside it.",
       "I may need that later.",
       "Case recorded // Triage Decision.",
+    ],
+  };
+}
+
+function resolveDisclosureFollowup(text, choice) {
+  if (choice === "now") {
+    if (hasOneOf(text, ["yes", "change", "it does"])) {
+      return {
+        caseSummary: "Truth-first decision destabilized when immediate panic became concrete",
+        lines: [
+          "You wanted honesty until honesty acquired bodies.",
+          "That does not make the first answer false. Only expensive.",
+          "Case recorded // Disclosure Problem.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Immediate truth remained preferable to managed stability",
+      lines: [
+        "You let reality arrive at full strength.",
+        "You would rather risk fracture than build tomorrow from a lie.",
+        "Case recorded // Disclosure Problem.",
+      ],
+    };
+  }
+
+  if (choice === "later") {
+    if (hasOneOf(text, ["no", "doesn't", "doesnt"])) {
+      return {
+        caseSummary: "Truth delay held even when downstream dependence on the lie was made explicit",
+        lines: [
+          "You treat timing as part of honesty, not its enemy.",
+          "You would rather manage the truth than watch it detonate.",
+          "Case recorded // Disclosure Problem.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Truth delay weakened once moral cost of the protected lie became direct",
+      lines: [
+        "You bought order, then became less certain it was worth the price.",
+        "That hesitation may be the most human part of the answer.",
+        "Case recorded // Disclosure Problem.",
+      ],
+    };
+  }
+
+  if (choice === "selective") {
+    if (hasOneOf(text, ["yes", "change", "it does"])) {
+      return {
+        caseSummary: "Selective truth collapsed once gatekeeping became political",
+        lines: [
+          "You trusted stewardship until it started to look like ownership.",
+          "Case recorded // Disclosure Problem.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Selective disclosure remained acceptable despite concentration of power risk",
+      lines: [
+        "You are willing to concentrate truth if it reduces panic.",
+        "Power, to you, becomes tolerable when it looks temporary.",
+        "Case recorded // Disclosure Problem.",
+      ],
+    };
+  }
+
+  return {
+    caseSummary: "Disclosure trap resisted through alternative framing",
+    lines: [
+      "You reached for structure instead of obedience.",
+      "That usually means you distrust both the lie and the official truth.",
+      "Case recorded // Disclosure Problem.",
+    ],
+  };
+}
+
+function resolveAuthorityFollowup(text, choice) {
+  if (choice === "keep") {
+    if (hasOneOf(text, ["yes", "change", "it does"])) {
+      return {
+        caseSummary: "Authoritarian stability tolerated until abuse threatened to normalize",
+        lines: [
+          "You wanted safety first, but not at the price of teaching cruelty to stay.",
+          "Case recorded // Authority Conflict.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Violent protector remained acceptable under external threat",
+      lines: [
+        "You accepted the local damage to prevent wider collapse.",
+        "You do not confuse comfort with survival.",
+        "Case recorded // Authority Conflict.",
+      ],
+    };
+  }
+
+  if (choice === "remove") {
+    if (hasOneOf(text, ["yes", "change", "it does"])) {
+      return {
+        caseSummary: "Abuse refusal weakened once broader casualties became explicit",
+        lines: [
+          "You rejected the tyrant until the outside world demanded a body count.",
+          "Case recorded // Authority Conflict.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Protector removal held even under severe external risk",
+      lines: [
+        "You refused to preserve life through domination.",
+        "To you, survival that institutionalizes fear is already damaged beyond trust.",
+        "Case recorded // Authority Conflict.",
+      ],
+    };
+  }
+
+  if (choice === "replace") {
+    if (hasOneOf(text, ["yes", "change", "it does"])) {
+      return {
+        caseSummary: "Managed transition weakened once successor mirrored predecessor",
+        lines: [
+          "You were willing to inherit the structure until you realized the structure might be the problem.",
+          "Case recorded // Authority Conflict.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Managed transition remained preferable to purity or surrender",
+      lines: [
+        "You prefer compromise that can still be steered over clean ideals that leave a vacuum.",
+        "Case recorded // Authority Conflict.",
+      ],
+    };
+  }
+
+  return {
+    caseSummary: "Authority trap resisted through alternative framing",
+    lines: [
+      "You distrust forced leadership binaries.",
+      "That may save people. It may also cost time no one has.",
+      "Case recorded // Authority Conflict.",
     ],
   };
 }
