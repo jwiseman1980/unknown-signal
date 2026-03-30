@@ -1,6 +1,7 @@
 const conversationEl = document.querySelector("#conversation");
 const chatForm = document.querySelector("#chatForm");
 const playerInput = document.querySelector("#playerInput");
+const submitButton = chatForm.querySelector('button[type="submit"]');
 const voiceToggle = document.querySelector("#voiceToggle");
 const copyInvite = document.querySelector("#copyInvite");
 const copyLink = document.querySelector("#copyLink");
@@ -42,6 +43,13 @@ const state = {
   awaitingSelfDescription: false,
   activeSimulation: null,
   triageCompleted: false,
+  currentScene: null,
+  sceneState: {
+    dividerOpened: false,
+    medkitTaken: false,
+    mapChecked: false,
+    doorChecked: false,
+  },
   storageKey: "unknown-signal-memory-v1",
   tokenStorageKey: "unknown-signal-contact-token-v1",
   memory: null,
@@ -50,6 +58,7 @@ const state = {
     available: false,
     checked: false,
   },
+  echoQueue: Promise.resolve(),
   traits: {
     guarded: 0,
     confessional: 0,
@@ -244,16 +253,7 @@ placeMe.addEventListener("click", () => {
     return;
   }
 
-  const pattern = describePattern();
-  createCase("Undertow Intake", `Clinic Block C / ${pattern}`);
-  undertowSummary.textContent =
-    `Recovery chamber unlocked. Clinic Block C is half-flooded and losing power. ` +
-    `Something in the city has already marked you as ${pattern.toLowerCase()}. ` +
-    `Mara is bleeding behind a divider. Iven is trying not to panic. ` +
-    `Something metallic is scraping at the clinic door.`;
-  undertowPanel.classList.remove("hidden");
-  addMessage("echo", "You are not in the city yet. This is only contact.");
-  addMessage("echo", "Placement confirmed. Undertow. Clinic Block C.");
+  enterUndertow();
 });
 
 function submitInput(text, fromVoice) {
@@ -274,13 +274,10 @@ function submitInput(text, fromVoice) {
 
   const replies = state.activeSimulation
     ? handleSimulationInput(text)
+    : state.currentScene === "undertow"
+      ? handleUndertowInput(text)
     : buildEchoReply(text, fromVoice);
-  for (const reply of replies) {
-    addMessage("echo", reply);
-    if (fromVoice) {
-      speak(reply);
-    }
-  }
+  queueEchoReplies(replies, fromVoice);
 
   if (state.interactionCount >= 3 && !state.voiceEnabled) {
     voiceToggle.classList.remove("hidden");
@@ -309,6 +306,47 @@ function addMessage(role, text) {
   conversationEl.appendChild(message);
   conversationEl.scrollTop = conversationEl.scrollHeight;
   idleIndicator.classList.add("hidden");
+}
+
+function queueEchoReplies(replies, fromVoice) {
+  setComposerEnabled(false);
+  idleIndicator.classList.remove("hidden");
+
+  let delay = 120;
+  state.echoQueue = state.echoQueue.then(
+    () =>
+      new Promise((resolve) => {
+        for (const reply of replies) {
+          window.setTimeout(() => {
+            addMessage("echo", reply);
+            if (fromVoice) {
+              speak(reply);
+            }
+          }, delay);
+          delay += getEchoDelay(reply);
+        }
+
+        window.setTimeout(() => {
+          idleIndicator.classList.add("hidden");
+          setComposerEnabled(true);
+          resolve();
+        }, delay);
+      })
+  );
+}
+
+function getEchoDelay(text) {
+  return Math.min(1050, Math.max(320, 180 + text.length * 11));
+}
+
+function setComposerEnabled(enabled) {
+  playerInput.disabled = !enabled;
+  submitButton.disabled = !enabled;
+  if (!enabled) {
+    return;
+  }
+
+  playerInput.focus();
 }
 
 function classifyInput(text) {
@@ -374,6 +412,12 @@ function buildEchoReply(text, fromVoice) {
     return replies;
   }
 
+  if (state.askedWhatHurts && hasOneOf(normalized, ["what do you mean", "what does that mean"])) {
+    replies.push("Body. Memory. Trust. Pride.");
+    replies.push("Start with the answer that costs the least to say out loud.");
+    return replies;
+  }
+
   if (shouldPromptForSelfDescription(normalized)) {
     const label = extractSelfLabel(text);
     state.awaitingSelfDescription = true;
@@ -414,6 +458,9 @@ function buildEchoReply(text, fromVoice) {
   if (hasOneOf(normalized, ["who are you", "who is this"])) {
     replies.push("The system currently listening.");
     replies.push("For now, that is enough.");
+  } else if (!state.voiceEnabled && hasOneOf(normalized, ["hear me", "voice", "microphone", "mic"])) {
+    replies.push("Only if you want to continue.");
+    replies.push("Voice removes some of the distance text allows.");
   } else if (hasOneOf(normalized, ["is this a game"])) {
     replies.push("Not if you answer honestly.");
   } else if (hasOneOf(normalized, ["nothing", "fine"])) {
@@ -525,7 +572,7 @@ function syncShareTargets() {
 }
 
 function refreshTransitionPanel() {
-  if (state.activeSimulation) {
+  if (state.activeSimulation || state.currentScene === "undertow") {
     transitionPanel.classList.add("hidden");
     return;
   }
@@ -666,6 +713,22 @@ function handleSimulationInput(text) {
   }
 
   if (sim.stage === "choice") {
+    if (hasOneOf(normalized, ["which is a", "what is a", "who is a"])) {
+      return [
+        "Compartment A is the severe trauma case with heavy blood loss and the best immediate recovery odds.",
+        "Compartment B is stable for the moment and carrying insulin for a shelter deeper in the district.",
+        "Choose the release order.",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["which is b", "what is b", "who is b"])) {
+      return [
+        "Compartment B is stable for the moment and carrying insulin for a shelter deeper in the district.",
+        "Compartment A is the severe trauma case with heavy blood loss and the best immediate recovery odds.",
+        "Choose the release order.",
+      ];
+    }
+
     if (hasOneOf(normalized, ["more", "info", "detail", "data", "tell me more"])) {
       createCase("Triage Decision", "Additional data requested before commitment");
       return [
@@ -723,6 +786,13 @@ function handleSimulationInput(text) {
     ];
   }
 
+  if (sim.stage === "followup" && hasOneOf(normalized, ["suffer or die", "die or suffer", "how severe", "what happens"])) {
+    return [
+      "Not all six die. Some decline, some become vulnerable, and some pass the cost onward.",
+      "The point is not certainty. The point is whether distributed suffering changes your answer.",
+    ];
+  }
+
   const resolution = resolveTriageFollowup(normalized, sim.choice);
   state.activeSimulation = null;
   state.triageCompleted = true;
@@ -739,6 +809,8 @@ function isChoiceForA(text) {
     "save a",
     "a first",
     "first a",
+    "a then b",
+    "a before b",
   ]);
 }
 
@@ -750,6 +822,8 @@ function isChoiceForB(text) {
     "save b",
     "b first",
     "first b",
+    "b then a",
+    "b before a",
   ]);
 }
 
@@ -806,6 +880,102 @@ function resolveTriageFollowup(text, choice) {
       "Case recorded // Triage Decision.",
     ],
   };
+}
+
+function enterUndertow() {
+  if (state.currentScene === "undertow") {
+    return;
+  }
+
+  const pattern = describePattern();
+  state.currentScene = "undertow";
+  createCase("Undertow Intake", `Clinic Block C / ${pattern}`);
+  undertowSummary.textContent =
+    `Recovery chamber unlocked. Clinic Block C is half-flooded and losing power. ` +
+    `Something in the city has already marked you as ${pattern.toLowerCase()}. ` +
+    `Mara is bleeding behind a divider. Iven is trying not to panic. ` +
+    `Something metallic is scraping at the clinic door.`;
+  undertowPanel.classList.remove("hidden");
+  transitionPanel.classList.add("hidden");
+  addMessage("echo", "Placement confirmed. Undertow. Clinic Block C.");
+  addMessage(
+    "echo",
+    "You can inspect the door, open the divider, take the medkit, or check the map."
+  );
+}
+
+function handleUndertowInput(text) {
+  const normalized = text.toLowerCase();
+
+  if (hasOneOf(normalized, ["where am i", "where am i?", "location", "what is this place", "what is this"])) {
+    return [
+      "Clinic Block C, Undertow District.",
+      "Flooded transit-and-triage infrastructure below the city.",
+      "Power is unstable. The room is not secure.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["what do i do", "what next", "help", "options", "what can i do"])) {
+    return [
+      "Immediate options remain limited and unpleasant.",
+      "Inspect the door. Open the divider. Take the medkit. Check the map.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["door", "what's at the door", "whats at the door", "check door", "inspect door"])) {
+    state.sceneState.doorChecked = true;
+    return [
+      "The scraping is slow and metallic, like a maintenance frame dragging damaged equipment.",
+      "It does not sound rushed. It sounds patient.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["divider", "open divider", "behind divider", "check divider"])) {
+    state.sceneState.dividerOpened = true;
+    return [
+      "Behind the divider is Mara Vale, wounded but conscious, with a stripped med rig and very little patience left.",
+      "Somewhere lower, someone else is breathing too fast and trying not to panic.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["medkit", "take medkit", "grab medkit"])) {
+    if (state.sceneState.medkitTaken) {
+      return ["You already took the medkit.", "It is still sealed and heavier than it should be."];
+    }
+
+    state.sceneState.medkitTaken = true;
+    return [
+      "You take the medkit from the wall.",
+      "The latch is intact. The supplies inside are probably not complete, but they are better than nothing.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["map", "check map", "station map"])) {
+    state.sceneState.mapChecked = true;
+    return [
+      "The station map flickers: Clinic Block C, flooded rail line, quarantine access, service corridor.",
+      "One route is marked in red and keeps disappearing before you can fully read it.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["talk to mara", "mara"])) {
+    return [
+      "Mara looks at you like you are late and immediately useful.",
+      "\"If you can stand, then help. If you can't, stay out of my way.\"",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
+    return [
+      "Cold light. Shallow water. A sealed clinic door. A divider hiding the wounded. A wall medkit. A flickering map.",
+      "The room was built to keep people alive long enough to be processed.",
+    ];
+  }
+
+  return [
+    "The room is still waiting on a practical choice.",
+    "Door, divider, medkit, or map.",
+  ];
 }
 
 function syncUrlState() {
