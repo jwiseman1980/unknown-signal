@@ -73,8 +73,8 @@ body::before {
   max-width: 920px;
   height: min(calc(100dvh - 48px), 860px);
   padding: 28px 24px;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  display: flex;
+  flex-direction: column;
   gap: 20px;
   overflow: hidden;
 }
@@ -188,6 +188,7 @@ h2 {
 }
 
 .conversation {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   display: grid;
@@ -314,8 +315,9 @@ select:focus-visible {
 .transition-panel,
 .undertow-panel {
   border: 1px solid var(--line);
-  padding: 18px;
+  padding: 14px 16px;
   background: rgba(4, 8, 5, 0.82);
+  flex: 0 0 auto;
 }
 
 .transition-copy,
@@ -323,6 +325,16 @@ select:focus-visible {
 .ethics-note {
   margin: 0 0 14px;
   line-height: 1.6;
+}
+
+.undertow-panel h2 {
+  margin-bottom: 8px;
+}
+
+.undertow-copy {
+  margin-bottom: 0;
+  color: var(--accent-2);
+  font-size: 0.96rem;
 }
 
 .ethics-note {
