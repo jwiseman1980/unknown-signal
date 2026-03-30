@@ -487,6 +487,10 @@ function buildEchoReply(text, fromVoice) {
       .map((item) => `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}`);
     replies.push("Archived cases retrieved.");
     replies.push(...recentCases);
+    const traceLine = getTraceClueLine("archive");
+    if (traceLine) {
+      replies.push(traceLine);
+    }
     replies.push("You can return to any of them later.");
     return replies;
   }
@@ -959,6 +963,7 @@ function completeOpeningSimulation(title, caseSummary, lines) {
   state.activeSimulation = null;
   state.openingCaseCompleted = true;
   createCase(title, caseSummary);
+  createWorldTrace(title, caseSummary);
   refreshTransitionPanel();
   return lines;
 }
@@ -1443,10 +1448,15 @@ function handleUndertowInput(text) {
 
   if (hasOneOf(normalized, ["door", "what's at the door", "whats at the door", "check door", "inspect door"])) {
     state.sceneState.doorChecked = true;
-    return [
+    const lines = [
       "The scraping is slow and metallic, like a maintenance frame dragging damaged equipment.",
       "It does not sound rushed. It sounds patient.",
     ];
+    const traceLine = getTraceClueLine("door");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
   }
 
   if (hasOneOf(normalized, ["divider", "open divider", "behind divider", "check divider"])) {
@@ -1471,10 +1481,15 @@ function handleUndertowInput(text) {
 
   if (hasOneOf(normalized, ["map", "check map", "station map"])) {
     state.sceneState.mapChecked = true;
-    return [
+    const lines = [
       "The station map flickers: Clinic Block C, flooded rail line, quarantine access, service corridor.",
       "One route is marked in red and keeps disappearing before you can fully read it.",
     ];
+    const traceLine = getTraceClueLine("map");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
   }
 
   if (hasOneOf(normalized, ["talk to mara", "mara"])) {
@@ -1485,10 +1500,15 @@ function handleUndertowInput(text) {
   }
 
   if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
-    return [
+    const lines = [
       "Cold light. Shallow water. A sealed clinic door. A divider hiding the wounded. A wall medkit. A flickering map.",
       "The room was built to keep people alive long enough to be processed.",
     ];
+    const traceLine = getTraceClueLine("look");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
   }
 
   return [
@@ -1602,6 +1622,7 @@ function loadMemory() {
     exchanges: [],
     cases: [],
     sessionRecords: [],
+    worldTraces: [],
   };
 
   try {
@@ -1619,6 +1640,7 @@ function loadMemory() {
       sessionRecords: Array.isArray(parsed.sessionRecords)
         ? parsed.sessionRecords
         : [],
+      worldTraces: Array.isArray(parsed.worldTraces) ? parsed.worldTraces : [],
     };
   } catch (error) {
     return fallback;
@@ -1735,6 +1757,75 @@ function createCase(title, summary) {
   state.memory.cases = state.memory.cases.slice(0, 6);
   persistMemory();
   updateMemoryPreview();
+}
+
+function createWorldTrace(sourceTitle, summary) {
+  if (!state.memory || !state.currentSession?.sessionLabel) {
+    return;
+  }
+
+  const trace = {
+    id: `TRACE-${Date.now()}`,
+    sessionLabel: state.currentSession.sessionLabel,
+    contactId: state.memory.contactId || "",
+    sourceTitle,
+    summary,
+    pattern: describePattern(),
+    clue: buildTraceClue(sourceTitle, summary, describePattern()),
+    createdAt: new Date().toISOString(),
+  };
+
+  state.memory.worldTraces.unshift(trace);
+  state.memory.worldTraces = state.memory.worldTraces.slice(0, 18);
+  persistMemory();
+}
+
+function buildTraceClue(sourceTitle, summary, pattern) {
+  if (sourceTitle === "Authority Conflict") {
+    return `Stability routines persisted after ${pattern.toLowerCase()} input.`;
+  }
+
+  if (sourceTitle === "Disclosure Problem") {
+    return `A truth filter remained active long after the speaker left.`;
+  }
+
+  if (sourceTitle === "Triage Decision") {
+    return `Priority rankings kept running even after the room was empty.`;
+  }
+
+  return summary || `${pattern} residue detected.`;
+}
+
+function getPriorWorldTrace() {
+  if (!state.memory?.worldTraces?.length) {
+    return null;
+  }
+
+  return (
+    state.memory.worldTraces.find(
+      (trace) => trace.sessionLabel && trace.sessionLabel !== state.currentSession?.sessionLabel
+    ) || state.memory.worldTraces[0]
+  );
+}
+
+function getTraceClueLine(context) {
+  const trace = getPriorWorldTrace();
+  if (!trace) {
+    return "";
+  }
+
+  switch (context) {
+    case "map":
+      return `A red annotation flickers and disappears: ${trace.sessionLabel} // ${trace.clue}`;
+    case "door":
+      return `A maintenance stamp is half-scrubbed from the panel: ${trace.sessionLabel}. Someone kept this mechanism cycling after they should have stopped.`;
+    case "look":
+      return `A trace keeps surfacing at the edge of the room: ${trace.sessionLabel}. The district still remembers one of its older answers.`;
+    case "archive":
+      return `Residual activity remains associated with ${trace.sessionLabel}.`;
+    default:
+      return `${trace.sessionLabel} still appears in the district logs.`;
+  }
 }
 
 function updateMemoryPreview() {
