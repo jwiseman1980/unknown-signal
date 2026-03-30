@@ -144,6 +144,17 @@ Primary contribution lanes:
 
 See [CONTRIBUTOR_BIBLE.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\CONTRIBUTOR_BIBLE.md) for contribution boundaries.
 
+## Gameplay Feel
+
+The player-facing feel should remain grounded in:
+
+- MUD openness
+- D&D campaign persistence
+- Dark Souls-style residue and asynchronous presence
+- a world run by a strange, evolving intelligence
+
+See [GAMEPLAY_PILLARS.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\GAMEPLAY_PILLARS.md) for the play-feel doctrine.
+
 ## Residual Population
 
 The world can later be populated not only by authored NPCs or live players, but by manifestations built from real player residues.
