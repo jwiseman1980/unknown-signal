@@ -3,6 +3,13 @@ const chatForm = document.querySelector("#chatForm");
 const playerInput = document.querySelector("#playerInput");
 const submitButton = chatForm.querySelector('button[type="submit"]');
 const voiceToggle = document.querySelector("#voiceToggle");
+const identityToggle = document.querySelector("#identityToggle");
+const identityPanel = document.querySelector("#identityPanel");
+const identityStatus = document.querySelector("#identityStatus");
+const copyThreadKey = document.querySelector("#copyThreadKey");
+const newThread = document.querySelector("#newThread");
+const threadKeyInput = document.querySelector("#threadKeyInput");
+const switchThread = document.querySelector("#switchThread");
 const copyInvite = document.querySelector("#copyInvite");
 const copyLink = document.querySelector("#copyLink");
 const shareInvite = document.querySelector("#shareInvite");
@@ -58,8 +65,8 @@ const state = {
     restedInShelter: false,
     archiveReviewedInShelter: false,
   },
-  storageKey: "unknown-signal-memory-v1",
-  tokenStorageKey: "unknown-signal-contact-token-v1",
+  activeThreadKeyStorageKey: "unknown-signal-active-thread-v1",
+  threadKey: "",
   memory: null,
   currentSession: null,
   remote: {
@@ -141,11 +148,78 @@ let recognition = null;
 
 boot();
 
+function getMemoryStorageKey() {
+  return `unknown-signal-memory-v1:${state.threadKey || "default"}`;
+}
+
+function getTokenStorageKey() {
+  return `unknown-signal-contact-token-v1:${state.threadKey || "default"}`;
+}
+
+function normalizeThreadKey(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "")
+    .slice(0, 18);
+}
+
+function generateThreadKey() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "THREAD-";
+  for (let index = 0; index < 8; index += 1) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return out;
+}
+
+function resolveThreadKey(params) {
+  const urlKey = normalizeThreadKey(params.get("thread"));
+  if (urlKey) {
+    try {
+      window.localStorage.setItem(state.activeThreadKeyStorageKey, urlKey);
+    } catch (error) {
+      // ignore storage failures
+    }
+    return urlKey;
+  }
+
+  try {
+    const storedKey = normalizeThreadKey(window.localStorage.getItem(state.activeThreadKeyStorageKey));
+    if (storedKey) {
+      return storedKey;
+    }
+  } catch (error) {
+    // ignore storage failures
+  }
+
+  const nextKey = generateThreadKey();
+  try {
+    window.localStorage.setItem(state.activeThreadKeyStorageKey, nextKey);
+  } catch (error) {
+    // ignore storage failures
+  }
+  return nextKey;
+}
+
+function activateThread(threadKey) {
+  try {
+    window.localStorage.setItem(state.activeThreadKeyStorageKey, threadKey);
+  } catch (error) {
+    // ignore storage failures
+  }
+
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("thread", threadKey);
+  window.location.assign(nextUrl.toString());
+}
+
 function boot() {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode");
   const seed = params.get("signal");
   const channel = params.get("channel");
+  state.threadKey = resolveThreadKey(params);
   state.devMode = params.get("dev") === "1";
   state.mode = modeConfig[mode] ? mode : "gentle";
   state.channel = channelConfig[channel] ? channel : "web";
@@ -168,6 +242,7 @@ function boot() {
   updateMemoryPreview();
   updateSessionPreview();
   persistMemory();
+  updateIdentityPanel();
   setupSpeechRecognition();
   setupSpeechSynthesis();
   initializeRemoteContact();
@@ -225,6 +300,30 @@ voiceToggle.addEventListener("click", () => {
   state.voiceEnabled = true;
   voiceToggle.textContent = "Listening...";
   recognition.start();
+});
+
+identityToggle.addEventListener("click", () => {
+  identityPanel.classList.toggle("hidden");
+});
+
+copyThreadKey.addEventListener("click", async () => {
+  await writeClipboard(state.threadKey);
+  addMessage("echo", "Thread key copied.");
+});
+
+newThread.addEventListener("click", () => {
+  const nextKey = generateThreadKey();
+  activateThread(nextKey);
+});
+
+switchThread.addEventListener("click", () => {
+  const nextKey = normalizeThreadKey(threadKeyInput.value);
+  if (!nextKey) {
+    addMessage("echo", "A thread key needs shape before it can be used.");
+    return;
+  }
+
+  activateThread(nextKey);
 });
 
 copyInvite.addEventListener("click", async () => {
@@ -851,6 +950,13 @@ function queueIntro() {
     chatForm.classList.remove("hidden");
     playerInput.focus();
   }, 1800);
+}
+
+function updateIdentityPanel() {
+  threadKeyInput.value = "";
+  identityStatus.textContent = state.memory?.contactAssigned
+    ? `${state.memory.contactId} is bound to ${state.threadKey}. Continue here, or switch threads.`
+    : `Thread key ready // ${state.threadKey}. Start here, or switch to another thread.`;
 }
 
 function getOpeningSimulationDefinition() {
@@ -1927,6 +2033,7 @@ function getShareUrl() {
   shareUrl.searchParams.set("signal", state.invitationSeed);
   shareUrl.searchParams.set("channel", state.channel);
   shareUrl.searchParams.delete("dev");
+  shareUrl.searchParams.delete("thread");
   return shareUrl.toString();
 }
 
@@ -2017,7 +2124,7 @@ function loadMemory() {
   };
 
   try {
-    const raw = window.localStorage.getItem(state.storageKey);
+    const raw = window.localStorage.getItem(getMemoryStorageKey());
     if (!raw) {
       return fallback;
     }
@@ -2064,7 +2171,7 @@ function persistMemory() {
   }
 
   try {
-    window.localStorage.setItem(state.storageKey, JSON.stringify(state.memory));
+    window.localStorage.setItem(getMemoryStorageKey(), JSON.stringify(state.memory));
   } catch (error) {
     // Ignore storage failures in the prototype.
   }
@@ -2220,6 +2327,7 @@ function getTraceClueLine(context) {
 }
 
 function updateMemoryPreview() {
+  updateIdentityPanel();
   if (!state.memory || !state.memory.contactAssigned) {
     contactIdValue.textContent = "No contact assigned yet.";
     casePreview.textContent = "No cases recorded.";
@@ -2245,6 +2353,7 @@ function createSessionRecord() {
     id: `SESSION-${Date.now()}`,
     startedAt: new Date().toISOString(),
     contactId: state.memory?.contactId || "",
+    threadKey: state.threadKey,
     contactToken: getOrCreateContactToken(),
     selfLabel: state.memory?.selfLabel || "",
     invite: state.invitationSeed,
@@ -2324,6 +2433,7 @@ function downloadSession(kind) {
 
 function buildTranscriptText() {
   const header = [
+    `Thread Key: ${state.threadKey}`,
     `Session Label: ${state.currentSession.sessionLabel || "Unassigned"}`,
     `Session: ${state.currentSession.id}`,
     `Started: ${state.currentSession.startedAt}`,
@@ -2344,18 +2454,16 @@ function buildTranscriptText() {
 
 function getOrCreateContactToken() {
   try {
-    const existing = window.localStorage.getItem(state.tokenStorageKey);
+    const existing = window.localStorage.getItem(getTokenStorageKey());
     if (existing) {
       return existing;
     }
 
-    const created =
-      window.crypto?.randomUUID?.() ||
-      `token-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-    window.localStorage.setItem(state.tokenStorageKey, created);
+    const created = `contact:${state.threadKey.toLowerCase()}`;
+    window.localStorage.setItem(getTokenStorageKey(), created);
     return created;
   } catch (error) {
-    return `token-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    return `contact:${state.threadKey.toLowerCase()}`;
   }
 }
 

@@ -65,7 +65,7 @@ body::before {
 }
 
 .terminal-window {
-  min-height: min(78vh, 760px);
+  min-height: min(86vh, 860px);
   padding: 28px 24px;
   display: grid;
   align-content: start;
@@ -74,6 +74,46 @@ body::before {
 
 .dev-panel {
   padding: 20px;
+}
+
+.terminal-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-label {
+  margin: 0;
+}
+
+.topbar-button {
+  padding: 8px 12px;
+}
+
+.identity-panel {
+  border: 1px solid var(--line);
+  padding: 16px;
+  background: rgba(4, 8, 5, 0.82);
+}
+
+.identity-copy,
+.identity-note {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.identity-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.identity-actions,
+.identity-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .eyebrow,
@@ -198,6 +238,7 @@ select {
   color: var(--text);
   padding: 0;
   font: inherit;
+  font-size: 16px;
 }
 
 input[type="text"]::placeholder {
@@ -311,8 +352,45 @@ select:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .terminal-shell {
+    padding: 0;
+    gap: 0;
+  }
+
   .terminal-window,
   .dev-panel {
-    padding: 18px;
+    width: 100%;
+    min-height: 100dvh;
+    padding: 16px;
+    border-left: none;
+    border-right: none;
+  }
+
+  .conversation {
+    min-height: calc(100dvh - 380px);
+  }
+
+  .composer {
+    position: sticky;
+    bottom: 0;
+    padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(6, 7, 10, 0), rgba(6, 7, 10, 0.92) 26%, rgba(6, 7, 10, 0.98) 100%);
+  }
+
+  .composer-actions,
+  .share-options,
+  .invite-editor-row,
+  .identity-actions,
+  .identity-row {
+    flex-direction: column;
+  }
+
+  .ghost-button,
+  .primary-button {
+    width: 100%;
+  }
+
+  .topbar-button {
+    width: auto;
   }
 }

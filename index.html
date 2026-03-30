@@ -13,6 +13,43 @@
   <body>
     <main class="terminal-shell">
       <section class="terminal-window">
+        <div class="terminal-topbar">
+          <p class="eyebrow topbar-label">Unknown Signal</p>
+          <button id="identityToggle" class="ghost-button topbar-button" type="button">
+            Identity
+          </button>
+        </div>
+
+        <section id="identityPanel" class="identity-panel hidden">
+          <p class="eyebrow">Thread Access</p>
+          <p id="identityStatus" class="identity-copy">
+            This device can keep a thread alive between visits.
+          </p>
+          <div class="identity-actions">
+            <button id="copyThreadKey" class="ghost-button" type="button">
+              Copy Thread Key
+            </button>
+            <button id="newThread" class="ghost-button" type="button">
+              Start New Thread
+            </button>
+          </div>
+          <div class="identity-row">
+            <input
+              id="threadKeyInput"
+              type="text"
+              placeholder="Enter thread key"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="switchThread" class="ghost-button" type="button">
+              Switch Thread
+            </button>
+          </div>
+          <p class="identity-note">
+            Use a thread key to return to the same contact line later. Full cross-device restoration becomes real once the persistent backend is live.
+          </p>
+        </section>
+
         <div id="conversation" class="conversation" aria-live="polite"></div>
         <div id="idleIndicator" class="idle-indicator" aria-hidden="true">
           <span class="cursor-block"></span>
