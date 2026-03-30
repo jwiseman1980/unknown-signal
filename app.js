@@ -183,7 +183,7 @@ function setupSpeechRecognition() {
   });
 
   recognition.addEventListener("end", () => {
-    voiceToggle.textContent = state.voiceEnabled ? "Voice Ready" : "Enable Voice";
+    voiceToggle.textContent = state.voiceEnabled ? "Voice Ready" : "Use Voice (Optional)";
   });
 }
 
@@ -301,7 +301,7 @@ function submitInput(text, fromVoice) {
     : buildEchoReply(text, fromVoice);
   queueEchoReplies(replies, fromVoice);
 
-  if (state.interactionCount >= 3 && !state.voiceEnabled) {
+  if (state.interactionCount >= 5 && !state.voiceEnabled) {
     voiceToggle.classList.remove("hidden");
   }
 
@@ -512,8 +512,8 @@ function buildEchoReply(text, fromVoice) {
     replies.push("The system currently listening.");
     replies.push("For now, that is enough.");
   } else if (!state.voiceEnabled && hasOneOf(normalized, ["hear me", "voice", "microphone", "mic"])) {
-    replies.push("Only if you want to continue.");
-    replies.push("Voice removes some of the distance text allows.");
+    replies.push("If you want, yes.");
+    replies.push("Voice is available. Text is still enough.");
   } else if (hasOneOf(normalized, ["is this a game"])) {
     replies.push("Not if you answer honestly.");
   } else if (hasOneOf(normalized, ["nothing", "fine"])) {
@@ -547,10 +547,9 @@ function buildEchoReply(text, fromVoice) {
 
   maybeApplyContactAddress(replies);
 
-  if (state.interactionCount === 3 && !state.voiceEnabled) {
-    replies.push("Typing introduces revision.");
-    replies.push("Revision introduces distance.");
-    replies.push("If you want to continue, let me hear you.");
+  if (state.interactionCount === 5 && !state.voiceEnabled) {
+    replies.push("If speaking is easier, voice is available.");
+    replies.push("You can stay with text.");
   } else if (state.interactionCount >= 4) {
     replies.push("You are not in the city yet. This is only contact.");
   }
