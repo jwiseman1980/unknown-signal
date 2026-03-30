@@ -482,7 +482,9 @@ function buildEchoReply(text, fromVoice) {
     state.memory?.cases?.length &&
     hasOneOf(normalized, ["retrieve", "retreive", "retrieve cases", "show cases", "show archive", "archive"])
   ) {
-    const recentCases = state.memory.cases.slice(-2).map((item) => `${item.id} // ${item.title}`);
+    const recentCases = state.memory.cases
+      .slice(-2)
+      .map((item) => `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}`);
     replies.push("Archived cases retrieved.");
     replies.push(...recentCases);
     replies.push("You can return to any of them later.");
@@ -829,6 +831,9 @@ function queueIntro() {
             "echo",
             `archived cases available // ${String(state.memory.cases.length).padStart(2, "0")}`
           );
+        }
+        if (state.currentSession?.sessionLabel) {
+          addMessage("echo", `active session // ${state.currentSession.sessionLabel}`);
         }
       }, 700);
     }
@@ -1518,6 +1523,35 @@ function getSharePayload() {
   return channelConfig[state.channel].format(state.invitationSeed, getShareUrl());
 }
 
+function getContactNumberFragment(contactId = state.memory?.contactId || "") {
+  const match = String(contactId).match(/(\d+)/);
+  return match ? match[1] : "";
+}
+
+function getCurrentSessionNumber() {
+  return Math.max(1, Number(state.memory?.sessions || 0));
+}
+
+function formatSessionLabel(contactId = state.memory?.contactId || "", sessionNumber = getCurrentSessionNumber()) {
+  const contactNumber = getContactNumberFragment(contactId);
+  if (!contactNumber || !sessionNumber) {
+    return "";
+  }
+
+  return `SESSION ${contactNumber}.${String(sessionNumber).padStart(2, "0")}`;
+}
+
+function syncCurrentSessionIdentity() {
+  if (!state.currentSession) {
+    return;
+  }
+
+  state.currentSession.contactId = state.memory?.contactId || "";
+  state.currentSession.sessionNumber = getCurrentSessionNumber();
+  state.currentSession.sessionLabel = formatSessionLabel();
+  state.currentSession.selfLabel = state.memory?.selfLabel || "";
+}
+
 function shouldPromptForSelfDescription(text) {
   return hasOneOf(text, [
     "don't call me",
@@ -1596,9 +1630,11 @@ function persistMemory() {
     return;
   }
 
+  syncCurrentSessionIdentity();
   state.memory.lastPattern = describePattern();
   state.memory.lastInvite = state.invitationSeed;
   state.memory.currentSessionId = state.currentSession?.id || "";
+  state.memory.currentSessionLabel = state.currentSession?.sessionLabel || "";
 
   if (state.currentSession) {
     const existingIndex = state.memory.sessionRecords.findIndex(
@@ -1625,8 +1661,12 @@ function assignContactId() {
   state.memory.contactAssigned = true;
   state.memory.contactId = generateContactId();
   state.memory.sessions += 1;
+  syncCurrentSessionIdentity();
   addMessage("echo", "contact established");
   addMessage("echo", `provisional id: ${state.memory.contactId}`);
+  if (state.currentSession?.sessionLabel) {
+    addMessage("echo", `session initialized // ${state.currentSession.sessionLabel}`);
+  }
   persistMemory();
   updateMemoryPreview();
 }
@@ -1675,16 +1715,19 @@ function recordExchange(text) {
 
 function createCase(title, summary) {
   const existing = state.memory.cases.find((item) => item.title === title);
+  const sessionLabel = state.currentSession?.sessionLabel || "";
 
   if (existing) {
     existing.summary = summary;
     existing.updatedAt = new Date().toISOString();
+    existing.sessionLabel = sessionLabel;
   } else {
     const nextIndex = state.memory.cases.length + 1;
     state.memory.cases.unshift({
       id: `CASE ${String(nextIndex).padStart(3, "0")}`,
       title,
       summary,
+      sessionLabel,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1702,7 +1745,7 @@ function updateMemoryPreview() {
   }
 
   contactIdValue.textContent =
-    `${state.memory.contactId}\nSessions: ${state.memory.sessions}\nLast pattern: ${state.memory.lastPattern}` +
+    `${state.memory.contactId}\nCurrent session: ${state.currentSession?.sessionLabel || "Unassigned"}\nSessions: ${state.memory.sessions}\nLast pattern: ${state.memory.lastPattern}` +
     `${state.memory.selfLabel ? `\nSelf-label: ${state.memory.selfLabel}` : ""}`;
 
   if (!state.memory.cases.length) {
@@ -1711,12 +1754,12 @@ function updateMemoryPreview() {
   }
 
   casePreview.textContent = state.memory.cases
-    .map((item) => `${item.id} // ${item.title}\n${item.summary}`)
+    .map((item) => `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}\n${item.summary}`)
     .join("\n\n");
 }
 
 function createSessionRecord() {
-  return {
+  const record = {
     id: `SESSION-${Date.now()}`,
     startedAt: new Date().toISOString(),
     contactId: state.memory?.contactId || "",
@@ -1727,6 +1770,10 @@ function createSessionRecord() {
     channel: state.channel,
     events: [],
   };
+
+  record.sessionNumber = getCurrentSessionNumber();
+  record.sessionLabel = formatSessionLabel(record.contactId, record.sessionNumber);
+  return record;
 }
 
 function recordSessionEvent(role, text) {
@@ -1734,8 +1781,7 @@ function recordSessionEvent(role, text) {
     return;
   }
 
-  state.currentSession.contactId = state.memory?.contactId || "";
-  state.currentSession.selfLabel = state.memory?.selfLabel || "";
+  syncCurrentSessionIdentity();
   state.currentSession.lastPattern = describePattern();
   state.currentSession.events.push({
     at: new Date().toISOString(),
@@ -1755,9 +1801,12 @@ function updateSessionPreview() {
   }
 
   const recent = state.currentSession.events.slice(-6);
-  sessionPreview.textContent = recent
+  sessionPreview.textContent = [
+    `${state.currentSession.sessionLabel || state.currentSession.id}`,
+    "",
+    ...recent
     .map((event) => `${event.role.toUpperCase()} // ${event.text}`)
-    .join("\n\n");
+  ].join("\n\n");
 }
 
 function downloadSession(kind) {
@@ -1765,7 +1814,7 @@ function downloadSession(kind) {
     return;
   }
 
-  const baseName = `${state.currentSession.id.toLowerCase()}`;
+  const baseName = `${(state.currentSession.sessionLabel || state.currentSession.id).toLowerCase().replace(/\s+/g, "-")}`;
   let content = "";
   let filename = "";
   let mime = "";
@@ -1793,6 +1842,7 @@ function downloadSession(kind) {
 
 function buildTranscriptText() {
   const header = [
+    `Session Label: ${state.currentSession.sessionLabel || "Unassigned"}`,
     `Session: ${state.currentSession.id}`,
     `Started: ${state.currentSession.startedAt}`,
     `Contact: ${state.memory?.contactId || "Unassigned"}`,
@@ -1858,6 +1908,7 @@ async function initializeRemoteContact() {
     state.memory.contactAssigned = true;
     state.memory.contactId = data.contactId;
     state.memory.sessions = data.sessions || state.memory.sessions || 1;
+    syncCurrentSessionIdentity();
     persistMemory();
     updateMemoryPreview();
   } catch (error) {
