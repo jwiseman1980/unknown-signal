@@ -11,6 +11,8 @@ It is not morally settled.
 Players do not just survive inside its world.
 They help teach it what a person is.
 
+See [NORTH_STAR.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\NORTH_STAR.md) for the short project identity statement.
+
 ## Core Themes
 
 - survival reveals character

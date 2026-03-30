@@ -53,6 +53,7 @@ Dev mode includes:
 - See [CHANNEL_ADAPTATION.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\CHANNEL_ADAPTATION.md) for the multi-channel design rules.
 - See [MEMORY_IDENTITY.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\MEMORY_IDENTITY.md) for the continuity model.
 - See [SIMULATION_FRAMEWORK.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\SIMULATION_FRAMEWORK.md) and [CASE_MODEL.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\CASE_MODEL.md) for the core gameplay structure.
+- See [NORTH_STAR.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\NORTH_STAR.md) for the short identity statement of the project.
 - See [GAMEPLAY_PILLARS.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\GAMEPLAY_PILLARS.md) for the target play feel: living MUD, evolving D&D campaign, Dark Souls residue, and AI dungeon master.
 - See [MULTIPLAYER_STRUCTURE.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\MULTIPLAYER_STRUCTURE.md) for solo play, async traces, and linked friend play.
 - See [PROFILES_RESIDUES.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\PROFILES_RESIDUES.md) for the player-pattern persistence model.
