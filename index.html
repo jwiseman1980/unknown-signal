@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Unknown Signal | Invitation</title>
+    <meta
+      name="description"
+      content="A strange signal found you first. Answer carefully."
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="terminal-shell">
+      <section class="terminal-window">
+        <div id="conversation" class="conversation" aria-live="polite"></div>
+        <div id="idleIndicator" class="idle-indicator" aria-hidden="true">
+          <span class="cursor-block"></span>
+        </div>
+
+        <form id="chatForm" class="composer hidden">
+          <label class="sr-only" for="playerInput">Your reply</label>
+          <div class="prompt-row">
+            <span class="prompt-marker">&gt;</span>
+            <input
+              id="playerInput"
+              type="text"
+              placeholder=""
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <div class="composer-actions">
+            <button id="voiceToggle" class="ghost-button hidden" type="button">
+              Enable Voice
+            </button>
+            <button class="ghost-button" type="submit">Enter</button>
+          </div>
+        </form>
+
+        <section id="transitionPanel" class="transition-panel hidden">
+          <p class="transition-copy">
+            You are not in the city yet. This is only contact.
+          </p>
+          <button id="placeMe" class="ghost-button" type="button">
+            Continue To Undertow
+          </button>
+        </section>
+
+        <section id="undertowPanel" class="undertow-panel hidden">
+          <p class="eyebrow">Placement Confirmed</p>
+          <h2>Undertow - Clinic Block C</h2>
+          <p id="undertowSummary" class="undertow-copy"></p>
+        </section>
+      </section>
+
+      <aside id="devPanel" class="dev-panel hidden">
+        <div class="dev-head">
+          <p class="eyebrow">Dev Mode</p>
+          <button id="shareInvite" class="ghost-button" type="button">
+            Share Signal
+          </button>
+        </div>
+
+        <div class="invite-editor">
+          <label class="contact-label" for="signalInput">Custom Signal</label>
+          <div class="invite-editor-row">
+            <input
+              id="signalInput"
+              type="text"
+              maxlength="120"
+              placeholder="hello"
+            />
+            <button id="updateSignal" class="ghost-button" type="button">
+              Update Signal
+            </button>
+          </div>
+          <p id="inviteMessage" class="dev-preview">hello</p>
+        </div>
+
+        <div class="invite-editor">
+          <label class="contact-label" for="contactMode">Contact Mood</label>
+          <div class="invite-editor-row">
+            <select id="contactMode">
+              <option value="gentle">Gentle</option>
+              <option value="uncanny">Uncanny</option>
+              <option value="warning">Warning</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="invite-editor">
+          <label class="contact-label" for="channelMode">Channel Target</label>
+          <div class="invite-editor-row">
+            <select id="channelMode">
+              <option value="web">Web / Link</option>
+              <option value="sms">SMS</option>
+              <option value="slack">Slack</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="share-options">
+          <button id="copyInvite" class="ghost-button" type="button">
+            Copy Text Invite
+          </button>
+          <button id="copyLink" class="ghost-button" type="button">
+            Copy Link
+          </button>
+          <a id="smsDraft" class="ghost-button share-link" href="#">Open SMS Draft</a>
+        </div>
+
+        <div class="invite-editor">
+          <p class="contact-label">Share Preview</p>
+          <pre id="sharePreview" class="share-preview"></pre>
+        </div>
+
+        <section class="insight-grid">
+          <article class="insight-card">
+            <p class="insight-label">Signal Attention</p>
+            <p id="attentionValue" class="insight-value">Low</p>
+          </article>
+          <article class="insight-card">
+            <p class="insight-label">Emerging Pattern</p>
+            <p id="patternValue" class="insight-value">Unreadable</p>
+          </article>
+          <article class="insight-card">
+            <p class="insight-label">Profile Trace</p>
+            <p id="profileValue" class="insight-value">No strong signal yet.</p>
+          </article>
+        </section>
+
+        <div class="invite-editor">
+          <p class="contact-label">Contact Record</p>
+          <p id="contactIdValue" class="dev-preview">No contact assigned yet.</p>
+        </div>
+
+        <div class="invite-editor">
+          <p class="contact-label">Case Files</p>
+          <pre id="casePreview" class="share-preview">No cases recorded.</pre>
+        </div>
+
+        <p class="ethics-note">
+          Interactive fiction prototype. Voice access is optional and only used
+          in your browser if you choose it.
+        </p>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
