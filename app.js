@@ -1767,6 +1767,7 @@ function handleRelayInput(text) {
       "The terminal is running on cached fragments and old session markers.",
       getTraceClueLine("archive") || "No stable trace resolves long enough to read cleanly.",
       "Someone has been using this room to sort what the city leaves behind.",
+      ...spawnStoryThread("relay-terminal"),
     ];
     return lines;
   }
@@ -1913,6 +1914,7 @@ function handlePlatformInput(text) {
     return [
       "The evac car is dark except for one destination board that keeps failing back to an old session label.",
       getTraceClueLine("map") || "The board never resolves into a destination you can trust.",
+      ...spawnStoryThread("platform-train"),
     ];
   }
 
@@ -1920,6 +1922,7 @@ function handlePlatformInput(text) {
     return [
       "The rails pulse with residual current. Not enough to kill immediately. Enough to teach caution.",
       "Someone crossed here recently anyway.",
+      ...spawnStoryThread("platform-rails"),
     ];
   }
 
@@ -1986,6 +1989,7 @@ function handleQuarantineInput(text) {
     return [
       "The panel flickers between error states and old session markers.",
       "One line holds steady longer than the rest: corroboration required // one voice insufficient.",
+      ...spawnStoryThread("quarantine-panel"),
     ];
   }
 
@@ -1993,6 +1997,7 @@ function handleQuarantineInput(text) {
     return [
       "Something moves once on the other side, then stops.",
       "The gate does not feel empty. It feels delayed.",
+      ...spawnStoryThread("quarantine-listen"),
     ];
   }
 
@@ -2121,6 +2126,7 @@ function loadMemory() {
     cases: [],
     sessionRecords: [],
     worldTraces: [],
+    storyThreads: [],
   };
 
   try {
@@ -2139,6 +2145,7 @@ function loadMemory() {
         ? parsed.sessionRecords
         : [],
       worldTraces: Array.isArray(parsed.worldTraces) ? parsed.worldTraces : [],
+      storyThreads: Array.isArray(parsed.storyThreads) ? parsed.storyThreads : [],
     };
   } catch (error) {
     return fallback;
@@ -2257,6 +2264,130 @@ function createCase(title, summary) {
   updateMemoryPreview();
 }
 
+function getStoryHookConfig(hookId) {
+  const configs = {
+    "relay-terminal": {
+      title: "Signal Drift Archive",
+      summary: ({ trace, pattern }) =>
+        trace
+          ? `A relay terminal resurrected ${trace.sessionLabel} and started sorting a missing contact trail around ${pattern.toLowerCase()} input.`
+          : `A relay terminal began assembling a missing contact trail the moment you touched it.`,
+      lead: ({ trace }) =>
+        trace
+          ? `The archive keeps looping back to ${trace.sessionLabel} and a route through Undertow that should already be gone.`
+          : `One cached entry insists someone left Undertow by a route the district no longer admits exists.`,
+      followUp: (thread, trace) =>
+        trace
+          ? `The archive still prioritizes ${thread.sourceSessionLabel || trace.sessionLabel}. Whatever it wants recovered was never filed cleanly.`
+          : `The archive keeps reordering itself around the same missing contact.`,
+    },
+    "platform-train": {
+      title: "Stalled Departure Manifest",
+      summary: ({ trace, pattern }) =>
+        trace
+          ? `A broken evac manifest keeps rebuilding itself around ${trace.sessionLabel} and your ${pattern.toLowerCase()} attention.`
+          : `A broken evac manifest keeps inventing one passenger too many for a train that should be empty.`,
+      lead: () =>
+        "One carriage still reports an occupied compartment long after the departure line was declared clear.",
+      followUp: (thread, trace) =>
+        trace
+          ? `The destination board still fails back to ${thread.sourceSessionLabel || trace.sessionLabel}. One compartment remains unresolved.`
+          : `The train still insists someone never fully disembarked.`,
+    },
+    "platform-rails": {
+      title: "Crossing Pattern",
+      summary: ({ pattern }) =>
+        `Residual current and recent footsteps suggest someone crossed the live rails after shutdown. The route reads like ${pattern.toLowerCase()} intent.`,
+      lead: () =>
+        "The crossing reaches toward the deeper wing, but the return path does not resolve.",
+      followUp: () =>
+        "The rails still imply traffic toward quarantine. Whatever crossed did not use the same logic on the way back.",
+    },
+    "quarantine-panel": {
+      title: "Corroboration Request",
+      summary: ({ trace }) =>
+        trace
+          ? `The quarantine panel has assembled an authorization problem around ${trace.sessionLabel} and now distrusts single-voice claims.`
+          : `The quarantine panel has turned one locked door into a procedural problem with no clean single-user answer.`,
+      lead: ({ trace }) =>
+        trace
+          ? `It keeps asking for a second confirming trace as if ${trace.sessionLabel} is still partially valid.`
+          : "The gate appears willing to accept a second voice, a second trace, or a lie convincing enough to simulate one.",
+      followUp: () =>
+        "The panel still rejects solitary certainty. It is learning how to distrust anyone who arrives alone.",
+    },
+    "quarantine-listen": {
+      title: "Delayed Occupant",
+      summary: ({ trace }) =>
+        trace
+          ? `Movement beyond the quarantine gate suggests an occupant, residue, or active process still orienting itself around ${trace.sessionLabel}.`
+          : "Movement beyond the quarantine gate suggests something is still choosing when to answer from the other side.",
+      lead: () =>
+        "Whatever is beyond the door only moves after you stop speaking.",
+      followUp: () =>
+        "The delayed movement persists. Something beyond the gate is letting silence choose the timing.",
+    },
+  };
+
+  return configs[hookId] || null;
+}
+
+function spawnStoryThread(hookId) {
+  if (!state.memory) {
+    return [];
+  }
+
+  const config = getStoryHookConfig(hookId);
+  if (!config) {
+    return [];
+  }
+
+  const sessionLabel = state.currentSession?.sessionLabel || "";
+  const trace = getPriorWorldTrace();
+  const pattern = describePattern();
+  const now = new Date().toISOString();
+  const existing = state.memory.storyThreads.find((item) => item.hookId === hookId);
+
+  if (existing) {
+    existing.updatedAt = now;
+    existing.sessionLabel = sessionLabel;
+    existing.pattern = pattern;
+    persistMemory();
+    updateMemoryPreview();
+    return [
+      `Thread active // ${existing.title}.`,
+      config.followUp(existing, trace, pattern),
+    ];
+  }
+
+  const nextIndex = state.memory.storyThreads.length + 1;
+  const thread = {
+    id: `THREAD ${String(nextIndex).padStart(3, "0")}`,
+    hookId,
+    title: config.title,
+    summary: config.summary({ trace, pattern, sessionLabel }),
+    lead: config.lead({ trace, pattern, sessionLabel }),
+    scene: state.currentScene || "",
+    sessionLabel,
+    sourceSessionLabel: trace?.sessionLabel || "",
+    pattern,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  state.memory.storyThreads.unshift(thread);
+  state.memory.storyThreads = state.memory.storyThreads.slice(0, 10);
+  createCase(thread.title, thread.summary);
+  persistMemory();
+  updateMemoryPreview();
+
+  return [
+    `Case born // ${thread.title}.`,
+    thread.summary,
+    thread.lead,
+  ];
+}
+
 function createWorldTrace(sourceTitle, summary) {
   if (!state.memory || !state.currentSession?.sessionLabel) {
     return;
@@ -2339,13 +2470,35 @@ function updateMemoryPreview() {
     `${state.memory.selfLabel ? `\nSelf-label: ${state.memory.selfLabel}` : ""}`;
 
   if (!state.memory.cases.length) {
-    casePreview.textContent = "No cases recorded.";
+    casePreview.textContent = state.memory.storyThreads.length
+      ? [
+          "No cases recorded.",
+          "",
+          "Story Threads",
+          ...state.memory.storyThreads.map(
+            (item) =>
+              `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}\n${item.summary}`
+          ),
+        ].join("\n")
+      : "No cases recorded.";
     return;
   }
 
-  casePreview.textContent = state.memory.cases
+  const caseLines = state.memory.cases
     .map((item) => `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}\n${item.summary}`)
     .join("\n\n");
+  const threadLines = state.memory.storyThreads.length
+    ? [
+        "",
+        "Story Threads",
+        ...state.memory.storyThreads.map(
+          (item) =>
+            `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}\n${item.summary}`
+        ),
+      ].join("\n\n")
+    : "";
+
+  casePreview.textContent = `${caseLines}${threadLines}`;
 }
 
 function createSessionRecord() {
