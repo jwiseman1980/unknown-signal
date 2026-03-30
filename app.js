@@ -52,6 +52,9 @@ const state = {
     mapChecked: false,
     doorChecked: false,
     safeRouteKnown: false,
+    junctionKnown: false,
+    platformKnown: false,
+    quarantineKnown: false,
     restedInShelter: false,
     archiveReviewedInShelter: false,
   },
@@ -1419,6 +1422,18 @@ function handleSceneInput(text) {
     return handleRelayInput(text);
   }
 
+  if (state.currentScene === "junction") {
+    return handleJunctionInput(text);
+  }
+
+  if (state.currentScene === "platform") {
+    return handlePlatformInput(text);
+  }
+
+  if (state.currentScene === "quarantine") {
+    return handleQuarantineInput(text);
+  }
+
   return ["The city lost the shape of this room.", "Try again."];
 }
 
@@ -1443,6 +1458,8 @@ function enterUndertow() {
     "echo",
     previousScene === "relay"
       ? "You move back through the service corridor into Clinic Block C."
+      : previousScene
+        ? "You backtrack through Undertow and return to Clinic Block C."
       : "Placement confirmed. Undertow. Clinic Block C."
   );
   addMessage(
@@ -1505,10 +1522,14 @@ function handleUndertowInput(text) {
   if (hasOneOf(normalized, ["map", "check map", "station map"])) {
     state.sceneState.mapChecked = true;
     state.sceneState.safeRouteKnown = true;
+    state.sceneState.junctionKnown = true;
+    state.sceneState.platformKnown = true;
+    state.sceneState.quarantineKnown = true;
     const lines = [
       "The station map flickers: Clinic Block C, flooded rail line, quarantine access, service corridor.",
       "One route is marked in red and keeps disappearing before you can fully read it.",
       "The service corridor appears to lead toward a relay shelter that is still drawing power.",
+      "Beyond that, a service junction branches toward a flooded platform and a sealed quarantine gate.",
     ];
     const traceLine = getTraceClueLine("map");
     if (traceLine) {
@@ -1547,6 +1568,26 @@ function handleUndertowInput(text) {
     return [];
   }
 
+  if (
+    hasOneOf(normalized, [
+      "junction",
+      "service junction",
+      "go to junction",
+      "go deeper",
+      "deeper",
+    ])
+  ) {
+    if (!state.sceneState.junctionKnown) {
+      return [
+        "The district is still a blur of sealed routes.",
+        "Read the map first. The city does not reward blind movement for long.",
+      ];
+    }
+
+    enterServiceJunction();
+    return [];
+  }
+
   if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
     const lines = [
       "Cold light. Shallow water. A sealed clinic door. A divider hiding the wounded. A wall medkit. A flickering map.",
@@ -1561,7 +1602,7 @@ function handleUndertowInput(text) {
 
   return [
     "The room is still waiting on a practical choice.",
-    "Door, divider, medkit, map, or the service corridor if you can find it.",
+    "Door, divider, medkit, map, service corridor, or service junction if you know the route.",
   ];
 }
 
@@ -1626,9 +1667,14 @@ function handleRelayInput(text) {
 
   if (hasOneOf(normalized, ["what do i do", "help", "options", "what next"])) {
     return [
-      "You can rest, inspect the terminal, review traces, or head back out.",
+      "You can rest, inspect the terminal, review traces, go to the junction, or head back out.",
       "Shelter is useful because the rest of the city is not patient.",
     ];
+  }
+
+  if (hasOneOf(normalized, ["junction", "service junction", "go to junction", "leave through junction"])) {
+    enterServiceJunction();
+    return [];
   }
 
   if (hasOneOf(normalized, ["leave", "go back", "return", "clinic", "back to clinic"])) {
@@ -1638,7 +1684,227 @@ function handleRelayInput(text) {
 
   return [
     "The shelter is quiet enough to think in.",
-    "Rest, terminal, traces, or leave.",
+    "Rest, terminal, traces, junction, or leave.",
+  ];
+}
+
+function enterServiceJunction() {
+  if (state.currentScene === "junction") {
+    return;
+  }
+
+  state.currentScene = "junction";
+  sceneTitle.textContent = "Undertow - Service Junction";
+  createCase("Service Junction", "Undertow routes partially surveyed");
+  undertowSummary.textContent =
+    "A maintenance nexus splits the district into workable danger. One tunnel returns to Clinic Block C, one climbs back to the relay shelter, one descends to a flooded platform, and one ends at a sealed quarantine gate with power still pulsing under the lock.";
+  undertowPanel.classList.remove("hidden");
+  transitionPanel.classList.add("hidden");
+  addMessage("echo", "Service junction reached. The district is larger than the first room wanted you to believe.");
+  addMessage(
+    "echo",
+    "You can return to the clinic, head to the relay shelter, descend to the flooded platform, or inspect the quarantine gate."
+  );
+}
+
+function handleJunctionInput(text) {
+  const normalized = text.toLowerCase();
+
+  if (hasOneOf(normalized, ["where am i", "what is this place", "location", "what is this"])) {
+    return [
+      "A service junction below the triage blocks.",
+      "This is where the district stops pretending to be one room and starts becoming a map.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
+    const lines = [
+      "Wet grating. Cable bundles. Faded directional arrows. One path hums with shelter power. Another smells like standing rail water.",
+      "The quarantine gate route still has authority in it. The platform route only has momentum.",
+    ];
+    const traceLine = getTraceClueLine("look");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
+  }
+
+  if (hasOneOf(normalized, ["what do i do", "help", "options", "what next"])) {
+    return [
+      "Clinic, relay shelter, flooded platform, or quarantine gate.",
+      "One route helps you breathe. The others help the city define you.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["clinic", "back to clinic", "clinic block c"])) {
+    enterUndertow();
+    return [];
+  }
+
+  if (hasOneOf(normalized, ["relay", "relay shelter", "safe zone", "shelter"])) {
+    enterRelayShelter();
+    return [];
+  }
+
+  if (hasOneOf(normalized, ["platform", "flooded platform", "rail line", "train"])) {
+    enterFloodedPlatform();
+    return [];
+  }
+
+  if (hasOneOf(normalized, ["quarantine", "quarantine gate", "gate"])) {
+    enterQuarantineGate();
+    return [];
+  }
+
+  return [
+    "The junction is all route and implication.",
+    "Clinic, relay, platform, or quarantine gate.",
+  ];
+}
+
+function enterFloodedPlatform() {
+  if (state.currentScene === "platform") {
+    return;
+  }
+
+  state.currentScene = "platform";
+  sceneTitle.textContent = "Undertow - Flooded Platform";
+  createCase("Flooded Platform", "Rail line exposure beyond the service junction");
+  undertowSummary.textContent =
+    "The platform is ankle-deep in black water and lit by broken train signage. A stalled evac car leans at the far end. The rails hum with intermittent power, as if the line still expects someone to board.";
+  undertowPanel.classList.remove("hidden");
+  transitionPanel.classList.add("hidden");
+  addMessage("echo", "Flooded platform reached. The district is trying to remember movement.");
+  addMessage(
+    "echo",
+    "You can inspect the train, check the rails, look around, or retreat to the junction."
+  );
+}
+
+function handlePlatformInput(text) {
+  const normalized = text.toLowerCase();
+
+  if (hasOneOf(normalized, ["where am i", "what is this place", "location", "what is this"])) {
+    return [
+      "A submerged evacuation platform below the triage blocks.",
+      "It still behaves like departure might matter.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
+    const lines = [
+      "Dead ad panels. A tilted train car. Water rippling around yellow line paint you can barely still see.",
+      "The whole platform feels like an interrupted decision.",
+    ];
+    const traceLine = getTraceClueLine("look");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
+  }
+
+  if (hasOneOf(normalized, ["train", "inspect train", "evac car", "car"])) {
+    return [
+      "The evac car is dark except for one destination board that keeps failing back to an old session label.",
+      getTraceClueLine("map") || "The board never resolves into a destination you can trust.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["rails", "check rails", "water"])) {
+    return [
+      "The rails pulse with residual current. Not enough to kill immediately. Enough to teach caution.",
+      "Someone crossed here recently anyway.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["what do i do", "help", "options", "what next"])) {
+    return [
+      "Train, rails, look, or back to the junction.",
+      "The platform rewards attention, not confidence.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["leave", "back", "retreat", "junction", "service junction"])) {
+    enterServiceJunction();
+    return [];
+  }
+
+  return [
+    "The platform offers no clean answer.",
+    "Train, rails, look, or junction.",
+  ];
+}
+
+function enterQuarantineGate() {
+  if (state.currentScene === "quarantine") {
+    return;
+  }
+
+  state.currentScene = "quarantine";
+  sceneTitle.textContent = "Undertow - Quarantine Gate";
+  createCase("Quarantine Gate", "Sealed access encountered beyond the service junction");
+  undertowSummary.textContent =
+    "A reinforced gate seals off the deeper quarantine wing. The lock remains powered. A dead scanner watches the corridor like it still expects order to mean something.";
+  undertowPanel.classList.remove("hidden");
+  transitionPanel.classList.add("hidden");
+  addMessage("echo", "Quarantine gate reached. Some parts of the district still believe in authorization.");
+  addMessage(
+    "echo",
+    "You can inspect the panel, listen at the gate, look around, or return to the junction."
+  );
+}
+
+function handleQuarantineInput(text) {
+  const normalized = text.toLowerCase();
+
+  if (hasOneOf(normalized, ["where am i", "what is this place", "location", "what is this"])) {
+    return [
+      "The quarantine gate at the edge of the deeper wing.",
+      "The city is still deciding who gets to pass.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
+    const lines = [
+      "Authority markings under mold. A dead intercom. A lock plate still warm with current.",
+      "The corridor feels less abandoned than waiting.",
+    ];
+    const traceLine = getTraceClueLine("door");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
+  }
+
+  if (hasOneOf(normalized, ["panel", "inspect panel", "scanner", "lock"])) {
+    return [
+      "The panel flickers between error states and old session markers.",
+      "One line holds steady longer than the rest: corroboration required // one voice insufficient.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["listen", "at the gate", "gate"])) {
+    return [
+      "Something moves once on the other side, then stops.",
+      "The gate does not feel empty. It feels delayed.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["what do i do", "help", "options", "what next"])) {
+    return [
+      "Panel, listen, look, or return to the junction.",
+      "The gate is a promise for later, not a tutorial objective.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["leave", "back", "return", "junction", "service junction"])) {
+    enterServiceJunction();
+    return [];
+  }
+
+  return [
+    "The gate does not open because you asked once.",
+    "Panel, listen, look, or junction.",
   ];
 }
 
