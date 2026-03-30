@@ -27,6 +27,7 @@ const transitionPanel = document.querySelector("#transitionPanel");
 const transitionCopy = document.querySelector("#transitionCopy");
 const placeMe = document.querySelector("#placeMe");
 const undertowPanel = document.querySelector("#undertowPanel");
+const sceneTitle = document.querySelector("#sceneTitle");
 const undertowSummary = document.querySelector("#undertowSummary");
 const API_BASE = "/api";
 
@@ -50,6 +51,9 @@ const state = {
     medkitTaken: false,
     mapChecked: false,
     doorChecked: false,
+    safeRouteKnown: false,
+    restedInShelter: false,
+    archiveReviewedInShelter: false,
   },
   storageKey: "unknown-signal-memory-v1",
   tokenStorageKey: "unknown-signal-contact-token-v1",
@@ -314,9 +318,9 @@ function submitInput(text, fromVoice) {
 
   const replies = state.activeSimulation
     ? handleSimulationInput(text)
-    : state.currentScene === "undertow"
-      ? handleUndertowInput(text)
-    : buildEchoReply(text, fromVoice);
+    : state.currentScene
+      ? handleSceneInput(text)
+      : buildEchoReply(text, fromVoice);
   queueEchoReplies(replies, fromVoice);
 
   if (state.interactionCount >= 5 && !state.voiceEnabled) {
@@ -675,7 +679,7 @@ function syncShareTargets() {
 }
 
 function refreshTransitionPanel() {
-  if (state.activeSimulation || state.currentScene === "undertow") {
+  if (state.activeSimulation || state.currentScene) {
     transitionPanel.classList.add("hidden");
     return;
   }
@@ -1406,13 +1410,27 @@ function resolveAuthorityFollowup(text, choice) {
   };
 }
 
+function handleSceneInput(text) {
+  if (state.currentScene === "undertow") {
+    return handleUndertowInput(text);
+  }
+
+  if (state.currentScene === "relay") {
+    return handleRelayInput(text);
+  }
+
+  return ["The city lost the shape of this room.", "Try again."];
+}
+
 function enterUndertow() {
   if (state.currentScene === "undertow") {
     return;
   }
 
+  const previousScene = state.currentScene;
   const pattern = describePattern();
   state.currentScene = "undertow";
+  sceneTitle.textContent = "Undertow - Clinic Block C";
   createCase("Undertow Intake", `Clinic Block C / ${pattern}`);
   undertowSummary.textContent =
     `Recovery chamber unlocked. Clinic Block C is half-flooded and losing power. ` +
@@ -1421,7 +1439,12 @@ function enterUndertow() {
     `Something metallic is scraping at the clinic door.`;
   undertowPanel.classList.remove("hidden");
   transitionPanel.classList.add("hidden");
-  addMessage("echo", "Placement confirmed. Undertow. Clinic Block C.");
+  addMessage(
+    "echo",
+    previousScene === "relay"
+      ? "You move back through the service corridor into Clinic Block C."
+      : "Placement confirmed. Undertow. Clinic Block C."
+  );
   addMessage(
     "echo",
     "You can inspect the door, open the divider, take the medkit, or check the map."
@@ -1481,9 +1504,11 @@ function handleUndertowInput(text) {
 
   if (hasOneOf(normalized, ["map", "check map", "station map"])) {
     state.sceneState.mapChecked = true;
+    state.sceneState.safeRouteKnown = true;
     const lines = [
       "The station map flickers: Clinic Block C, flooded rail line, quarantine access, service corridor.",
       "One route is marked in red and keeps disappearing before you can fully read it.",
+      "The service corridor appears to lead toward a relay shelter that is still drawing power.",
     ];
     const traceLine = getTraceClueLine("map");
     if (traceLine) {
@@ -1497,6 +1522,29 @@ function handleUndertowInput(text) {
       "Mara looks at you like you are late and immediately useful.",
       "\"If you can stand, then help. If you can't, stay out of my way.\"",
     ];
+  }
+
+  if (
+    hasOneOf(normalized, [
+      "service corridor",
+      "relay shelter",
+      "safe zone",
+      "go to shelter",
+      "go to safe zone",
+      "follow the red route",
+      "relay",
+      "shelter",
+    ])
+  ) {
+    if (!state.sceneState.safeRouteKnown) {
+      return [
+        "You do not have a clean route yet.",
+        "Check the map first. The room was built to hide exits inside process flow.",
+      ];
+    }
+
+    enterRelayShelter();
+    return [];
   }
 
   if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
@@ -1513,7 +1561,84 @@ function handleUndertowInput(text) {
 
   return [
     "The room is still waiting on a practical choice.",
-    "Door, divider, medkit, or map.",
+    "Door, divider, medkit, map, or the service corridor if you can find it.",
+  ];
+}
+
+function enterRelayShelter() {
+  if (state.currentScene === "relay") {
+    return;
+  }
+
+  state.currentScene = "relay";
+  sceneTitle.textContent = "Relay Shelter";
+  createCase("Relay Shelter", "Temporary refuge reached beyond Clinic Block C");
+  undertowSummary.textContent =
+    "A dry relay room hums behind reinforced shutters. Someone converted it into a shelter with scavenged chairs, power cells, old med blankets, and a terminal that still flickers when the city spikes.";
+  undertowPanel.classList.remove("hidden");
+  transitionPanel.classList.add("hidden");
+  addMessage("echo", "Temporary shelter located. Relay room stable for the moment.");
+  addMessage(
+    "echo",
+    "You can rest, review traces, inspect the terminal, or head back to Clinic Block C."
+  );
+}
+
+function handleRelayInput(text) {
+  const normalized = text.toLowerCase();
+
+  if (hasOneOf(normalized, ["where am i", "what is this place", "what is this", "location"])) {
+    return [
+      "A relay shelter cut out of an old service room.",
+      "It is safer than the clinic, not safe.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["look", "look around", "survey room"])) {
+    const lines = [
+      "Dry floor. Reinforced door. Low generator hum. A dead kettle beside a live terminal. Three chairs that do not match.",
+      "People have stayed here just long enough to leave evidence of themselves and then move on.",
+    ];
+    const traceLine = getTraceClueLine("look");
+    if (traceLine) {
+      lines.push(traceLine);
+    }
+    return lines;
+  }
+
+  if (hasOneOf(normalized, ["rest", "sit", "breathe", "wait"])) {
+    state.sceneState.restedInShelter = true;
+    return [
+      "You let the room hold your weight for a moment.",
+      "The city feels farther away here, which is not the same thing as gone.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["terminal", "inspect terminal", "use terminal", "traces", "review traces"])) {
+    state.sceneState.archiveReviewedInShelter = true;
+    const lines = [
+      "The terminal is running on cached fragments and old session markers.",
+      getTraceClueLine("archive") || "No stable trace resolves long enough to read cleanly.",
+      "Someone has been using this room to sort what the city leaves behind.",
+    ];
+    return lines;
+  }
+
+  if (hasOneOf(normalized, ["what do i do", "help", "options", "what next"])) {
+    return [
+      "You can rest, inspect the terminal, review traces, or head back out.",
+      "Shelter is useful because the rest of the city is not patient.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["leave", "go back", "return", "clinic", "back to clinic"])) {
+    enterUndertow();
+    return [];
+  }
+
+  return [
+    "The shelter is quiet enough to think in.",
+    "Rest, terminal, traces, or leave.",
   ];
 }
 
