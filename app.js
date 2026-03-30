@@ -60,6 +60,8 @@ const state = {
     checked: false,
   },
   echoQueue: Promise.resolve(),
+  speechQueue: Promise.resolve(),
+  preferredVoice: null,
   traits: {
     guarded: 0,
     confessional: 0,
@@ -160,6 +162,7 @@ function boot() {
   updateSessionPreview();
   persistMemory();
   setupSpeechRecognition();
+  setupSpeechSynthesis();
   initializeRemoteContact();
   queueIntro();
 }
@@ -185,6 +188,21 @@ function setupSpeechRecognition() {
   recognition.addEventListener("end", () => {
     voiceToggle.textContent = state.voiceEnabled ? "Voice Ready" : "Use Voice (Optional)";
   });
+}
+
+function setupSpeechSynthesis() {
+  if (!synth) {
+    return;
+  }
+
+  const assignVoice = () => {
+    state.preferredVoice = pickPreferredVoice(synth.getVoices());
+  };
+
+  assignVoice();
+  if ("onvoiceschanged" in synth) {
+    synth.onvoiceschanged = assignVoice;
+  }
 }
 
 chatForm.addEventListener("submit", (event) => {
@@ -684,11 +702,73 @@ function speak(text) {
     return;
   }
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.95;
-  utterance.pitch = 0.88;
-  synth.cancel();
-  synth.speak(utterance);
+  state.speechQueue = state.speechQueue.then(
+    () =>
+      new Promise((resolve) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.98;
+        utterance.pitch = 0.92;
+        if (state.preferredVoice) {
+          utterance.voice = state.preferredVoice;
+        }
+        utterance.addEventListener("end", resolve, { once: true });
+        utterance.addEventListener("error", resolve, { once: true });
+        synth.speak(utterance);
+      })
+  );
+}
+
+function pickPreferredVoice(voices) {
+  if (!voices?.length) {
+    return null;
+  }
+
+  const preferredTokens = [
+    "aria",
+    "jenny",
+    "guy",
+    "emma",
+    "andrew",
+    "sara",
+    "sonia",
+    "libby",
+    "natural",
+    "neural",
+    "online",
+  ];
+
+  const englishVoices = voices.filter((voice) => (voice.lang || "").toLowerCase().startsWith("en"));
+  const pool = englishVoices.length ? englishVoices : voices;
+
+  const scored = pool
+    .map((voice) => {
+      const name = (voice.name || "").toLowerCase();
+      const lang = (voice.lang || "").toLowerCase();
+      let score = 0;
+
+      if (voice.localService) {
+        score += 2;
+      }
+
+      if (lang.startsWith("en-us")) {
+        score += 3;
+      } else if (lang.startsWith("en")) {
+        score += 1;
+      }
+
+      if (preferredTokens.some((token) => name.includes(token))) {
+        score += 6;
+      }
+
+      if (name.includes("microsoft")) {
+        score += 2;
+      }
+
+      return { voice, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.voice || pool[0] || null;
 }
 
 function buildModeLeadIn(normalized) {
