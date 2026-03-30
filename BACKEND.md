@@ -26,6 +26,9 @@ Creates or resumes a contact using a pseudonymous contact token.
 - `POST /api/session`
 Stores a session record for a contact.
 
+- `POST /api/group`
+Creates or joins a lightweight linked-play thread using an invite code.
+
 - `GET /api/health`
 Reports whether the backend is live and whether KV is configured.
 
@@ -42,6 +45,22 @@ Without those, the frontend still works, but the backend routes return `kv_not_c
 
 - GitHub Pages = frontend-only testing
 - Vercel = frontend + API + persistent numbering
+
+## Linked Play Scaffold
+
+The group route is intentionally lightweight.
+
+It can:
+
+- create a shared invite code
+- let another contact join
+- associate current session labels with the same group thread
+
+This is enough to begin testing:
+
+- friend-linked sessions
+- multi-voice simulations later
+- group traces tied to multiple session labels
 
 ## Why This Split Is Fine
 

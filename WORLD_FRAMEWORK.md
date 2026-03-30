@@ -65,6 +65,8 @@ The city changes through accumulated player action.
 Multiple players can enter scenarios together.
 The Echo learns from group dynamics as well as individual behavior.
 
+See [MULTIPLAYER_STRUCTURE.md](C:\Users\JosephWiseman\OneDrive - Steel-Hearts.org\AI Projects\Sandbox Game\MULTIPLAYER_STRUCTURE.md) for the linked-play model.
+
 ## The Weave
 
 The Weave is the braided-story model.
