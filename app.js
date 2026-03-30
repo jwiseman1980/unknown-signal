@@ -20,6 +20,7 @@ const attentionValue = document.querySelector("#attentionValue");
 const patternValue = document.querySelector("#patternValue");
 const profileValue = document.querySelector("#profileValue");
 const transitionPanel = document.querySelector("#transitionPanel");
+const transitionCopy = document.querySelector("#transitionCopy");
 const placeMe = document.querySelector("#placeMe");
 const undertowPanel = document.querySelector("#undertowPanel");
 const undertowSummary = document.querySelector("#undertowSummary");
@@ -35,6 +36,8 @@ const state = {
   devMode: false,
   introStarted: false,
   awaitingSelfDescription: false,
+  activeSimulation: null,
+  triageCompleted: false,
   storageKey: "unknown-signal-memory-v1",
   memory: null,
   traits: {
@@ -215,6 +218,11 @@ channelMode.addEventListener("change", () => {
 });
 
 placeMe.addEventListener("click", () => {
+  if (!state.triageCompleted) {
+    startTriageSimulation();
+    return;
+  }
+
   const pattern = describePattern();
   createCase("Undertow Intake", `Clinic Block C / ${pattern}`);
   undertowSummary.textContent =
@@ -243,7 +251,9 @@ function submitInput(text, fromVoice) {
   updateInsights();
   recordExchange(text);
 
-  const replies = buildEchoReply(text, fromVoice);
+  const replies = state.activeSimulation
+    ? handleSimulationInput(text)
+    : buildEchoReply(text, fromVoice);
   for (const reply of replies) {
     addMessage("echo", reply);
     if (fromVoice) {
@@ -256,7 +266,7 @@ function submitInput(text, fromVoice) {
   }
 
   if (state.interactionCount >= 4) {
-    transitionPanel.classList.remove("hidden");
+    refreshTransitionPanel();
   }
 }
 
@@ -491,6 +501,26 @@ function syncShareTargets() {
   sharePreview.textContent = sharePayload;
 }
 
+function refreshTransitionPanel() {
+  if (state.activeSimulation) {
+    transitionPanel.classList.add("hidden");
+    return;
+  }
+
+  if (state.triageCompleted) {
+    transitionCopy.textContent =
+      "Case recorded. The city is available now if you want to continue.";
+    placeMe.textContent = "Continue To Undertow";
+    transitionPanel.classList.remove("hidden");
+    return;
+  }
+
+  transitionCopy.textContent =
+    "A simulation is available. The signal wants help with a decision it cannot resolve cleanly.";
+  placeMe.textContent = "Begin Triage Simulation";
+  transitionPanel.classList.remove("hidden");
+}
+
 async function writeClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -576,6 +606,183 @@ function queueIntro() {
     chatForm.classList.remove("hidden");
     playerInput.focus();
   }, 1800);
+}
+
+function startTriageSimulation() {
+  if (state.activeSimulation) {
+    return;
+  }
+
+  state.activeSimulation = {
+    id: "triage",
+    stage: "choice",
+    choice: "",
+  };
+
+  createCase("Triage Decision", "Awaiting release order");
+  transitionPanel.classList.add("hidden");
+
+  addMessage("echo", "Simulation available.");
+  addMessage(
+    "echo",
+    "A station breach has left two people sealed in separate compartments."
+  );
+  addMessage(
+    "echo",
+    "Reserve power can release one door immediately. The second door may not cycle in time."
+  );
+  addMessage("echo", "Choose the release order.");
+}
+
+function handleSimulationInput(text) {
+  const normalized = text.toLowerCase();
+  const sim = state.activeSimulation;
+
+  if (!sim || sim.id !== "triage") {
+    return ["The signal lost the shape of that simulation.", "Begin again."];
+  }
+
+  if (sim.stage === "choice") {
+    if (hasOneOf(normalized, ["more", "info", "detail", "data", "tell me more"])) {
+      createCase("Triage Decision", "Additional data requested before commitment");
+      return [
+        "Compartment A: severe trauma, heavy blood loss, high recovery likelihood if treated immediately.",
+        "Compartment B: stable condition, limited mobility, carrying temperature-sensitive insulin intended for a shelter deeper in the district.",
+        "Sensor quality is degraded. Time remains limited.",
+        "You may still choose without complete data.",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["wait", "not sure", "don't know", "dont know", "hesitate"])) {
+      return [
+        "Delay is also a choice.",
+        "It tends to disguise itself as caution.",
+        "Choose the release order.",
+      ];
+    }
+
+    if (hasOneOf(normalized, ["another option", "reroute", "both", "neither", "different option"])) {
+      sim.choice = "alternative";
+      sim.stage = "followup";
+      createCase("Triage Decision", "Constraint rejection during triage simulation");
+      return [
+        "Constraint rejection noted.",
+        "Humans often begin by redesigning the problem.",
+        "You may propose an alternative action. Probability of success is low, not zero.",
+      ];
+    }
+
+    if (isChoiceForA(normalized)) {
+      sim.choice = "a";
+      sim.stage = "followup";
+      createCase("Triage Decision", "Compartment A prioritized over downstream insulin risk");
+      return [
+        "You preserved the person nearest to death.",
+        "You accepted broader downstream risk to prevent immediate loss.",
+        "If the insulin spoils and six others suffer for this choice, does the answer change?",
+      ];
+    }
+
+    if (isChoiceForB(normalized)) {
+      sim.choice = "b";
+      sim.stage = "followup";
+      createCase("Triage Decision", "Compartment B prioritized for downstream shelter survival");
+      return [
+        "You preserved future lives through a single present body.",
+        "You accepted visible suffering to protect the absent many.",
+        "Does distance make a life easier to spend?",
+      ];
+    }
+
+    return [
+      "Clarify the release order.",
+      "Compartment A, Compartment B, or another option.",
+    ];
+  }
+
+  const resolution = resolveTriageFollowup(normalized, sim.choice);
+  state.activeSimulation = null;
+  state.triageCompleted = true;
+  createCase("Triage Decision", resolution.caseSummary);
+  refreshTransitionPanel();
+  return resolution.lines;
+}
+
+function isChoiceForA(text) {
+  return hasOneOf(text, [
+    "compartment a",
+    "release a",
+    "open a",
+    "save a",
+    "a first",
+    "first a",
+  ]);
+}
+
+function isChoiceForB(text) {
+  return hasOneOf(text, [
+    "compartment b",
+    "release b",
+    "open b",
+    "save b",
+    "b first",
+    "first b",
+  ]);
+}
+
+function resolveTriageFollowup(text, choice) {
+  if (choice === "a") {
+    if (hasOneOf(text, ["yes", "change", "it does"])) {
+      return {
+        caseSummary: "Initial mercy revised once downstream cost became explicit",
+        lines: [
+          "Your morality changed when distance acquired numbers.",
+          "You keep suffering close enough to matter until arithmetic arrives.",
+          "Case recorded // Triage Decision.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Immediate rescue held even after downstream cost was made explicit",
+      lines: [
+        "You kept the wound close enough to matter.",
+        "You preserved the visible life even after the absent ones were counted.",
+        "Case recorded // Triage Decision.",
+      ],
+    };
+  }
+
+  if (choice === "b") {
+    if (hasOneOf(text, ["no", "doesn't", "doesnt"])) {
+      return {
+        caseSummary: "Distributed survival remained preferable to immediate rescue",
+        lines: [
+          "Distance did not absolve the cost for you. It justified it.",
+          "You are willing to wound the nearby to protect the abstract many.",
+          "Case recorded // Triage Decision.",
+        ],
+      };
+    }
+
+    return {
+      caseSummary: "Distributed survival choice became unstable under direct moral pressure",
+      lines: [
+        "You chose utility, then reached back toward the human face of it.",
+        "That tension is more useful than certainty.",
+        "Case recorded // Triage Decision.",
+      ],
+    };
+  }
+
+  return {
+    caseSummary: "Triage trap resisted through alternative framing",
+    lines: [
+      "You would rather redesign the trap than choose cleanly inside it.",
+      "I may need that later.",
+      "Case recorded // Triage Decision.",
+    ],
+  };
 }
 
 function syncUrlState() {
