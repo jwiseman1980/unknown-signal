@@ -542,7 +542,7 @@ function classifyInput(text) {
 }
 
 function buildEchoReply(text, fromVoice) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeInteractiveInput(text);
   const replies = [];
 
   if (
@@ -606,7 +606,7 @@ function buildEchoReply(text, fromVoice) {
     return replies;
   }
 
-  if (state.askedWhatHurts && hasOneOf(normalized, ["what do you mean", "what does that mean"])) {
+  if (state.askedWhatHurts && hasOneOf(normalized, ["what do you mean", "what does that mean", "clarify what"])) {
     replies.push("Body. Memory. Trust. Pride.");
     replies.push("Start with the answer that costs the least to say out loud.");
     return replies;
@@ -768,6 +768,41 @@ function describeProfile() {
 
 function hasOneOf(text, fragments) {
   return fragments.some((fragment) => text.includes(fragment));
+}
+
+function normalizeInteractiveInput(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[?!.,]/g, " ")
+    .replace(/\bopen the divide\b/g, "open divider")
+    .replace(/\bopen divide\b/g, "open divider")
+    .replace(/\bdivide\b/g, "divider")
+    .replace(/\btalk mara\b/g, "talk to mara")
+    .replace(/\blook map\b/g, "check map")
+    .replace(/\bopen the medkit\b/g, "open medkit")
+    .replace(/\binspect the medkit\b/g, "open medkit")
+    .replace(/\binspect medkit\b/g, "open medkit")
+    .replace(/\bfeel the medkit\b/g, "open medkit")
+    .replace(/\bunseal the kit\b/g, "open medkit")
+    .replace(/\bunseal kit\b/g, "open medkit")
+    .replace(/\bhelp mara\b/g, "treat mara")
+    .replace(/\bheal mara\b/g, "treat mara")
+    .replace(/\bpatch mara\b/g, "treat mara")
+    .replace(/\bgive her medkit\b/g, "treat mara")
+    .replace(/\bgive her the medkit\b/g, "treat mara")
+    .replace(/\bgive mara the medkit\b/g, "treat mara")
+    .replace(/\buse route\b/g, "follow route")
+    .replace(/\buse the route\b/g, "follow route")
+    .replace(/\bevac manifest\b/g, "manifest")
+    .replace(/\bpassenger list\b/g, "manifest")
+    .replace(/\bdestination board\b/g, "manifest")
+    .replace(/\buse train\b/g, "resolve compartment")
+    .replace(/\bboard train\b/g, "resolve compartment")
+    .replace(/\benter train\b/g, "resolve compartment")
+    .replace(/\bopen compartment\b/g, "resolve compartment")
+    .replace(/\boccupied compartment\b/g, "resolve compartment")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function soundsLikePhysicalPain(text) {
@@ -1619,7 +1654,7 @@ function enterUndertow() {
 }
 
 function handleUndertowInput(text) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeInteractiveInput(text);
 
   if (hasOneOf(normalized, ["where am i", "where am i?", "location", "what is this place", "what is this"])) {
     return [
@@ -1678,18 +1713,6 @@ function handleUndertowInput(text) {
     ];
   }
 
-  if (hasOneOf(normalized, ["medkit", "take medkit", "grab medkit"])) {
-    if (state.sceneState.medkitTaken) {
-      return ["You already took the medkit.", "It is still sealed and heavier than it should be."];
-    }
-
-    state.sceneState.medkitTaken = true;
-    return [
-      "You take the medkit from the wall.",
-      "The latch is intact. The supplies inside are probably not complete, but they are better than nothing.",
-    ];
-  }
-
   if (hasOneOf(normalized, ["open medkit", "unseal the kit", "unseal kit", "inspect medkit", "inspect the medkit", "open the medkit", "feel the medkit"])) {
     if (!state.sceneState.medkitTaken) {
       return [
@@ -1709,6 +1732,18 @@ function handleUndertowInput(text) {
     return [
       "You crack the latch and open the medkit.",
       "Inside: sealant foam, bandage wraps, pain suppressors, one injector, and not much margin for error.",
+    ];
+  }
+
+  if (hasOneOf(normalized, ["take medkit", "grab medkit", "take the medkit", "grab the medkit", "medkit"])) {
+    if (state.sceneState.medkitTaken) {
+      return ["You already took the medkit.", "It is still sealed and heavier than it should be."];
+    }
+
+    state.sceneState.medkitTaken = true;
+    return [
+      "You take the medkit from the wall.",
+      "The latch is intact. The supplies inside are probably not complete, but they are better than nothing.",
     ];
   }
 
@@ -1864,7 +1899,7 @@ function enterRelayShelter() {
 }
 
 function handleRelayInput(text) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeInteractiveInput(text);
 
   if (hasOneOf(normalized, ["where am i", "what is this place", "what is this", "location"])) {
     return [
@@ -1954,7 +1989,7 @@ function enterServiceJunction() {
 }
 
 function handleJunctionInput(text) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeInteractiveInput(text);
 
   if (hasOneOf(normalized, ["where am i", "what is this place", "location", "what is this"])) {
     return [
@@ -2028,7 +2063,7 @@ function enterFloodedPlatform() {
 }
 
 function handlePlatformInput(text) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeInteractiveInput(text);
 
   if (hasOneOf(normalized, ["where am i", "what is this place", "location", "what is this"])) {
     return [
@@ -2124,7 +2159,7 @@ function enterQuarantineGate() {
 }
 
 function handleQuarantineInput(text) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeInteractiveInput(text);
 
   if (hasOneOf(normalized, ["where am i", "what is this place", "location", "what is this"])) {
     return [
