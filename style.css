@@ -421,3 +421,82 @@ select:focus-visible {
     width: auto;
   }
 }
+
+/* Combat HUD */
+.combat-hud {
+  flex-shrink: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.hud-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.hud-row--enemy {
+  margin-top: 4px;
+}
+
+.hud-row--skills {
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+.hud-label {
+  flex-shrink: 0;
+  width: 48px;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.hud-bar {
+  flex: 1 1 auto;
+  height: 8px;
+  background: rgba(143, 255, 186, 0.08);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.hud-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.hud-fill--hp {
+  background: var(--accent);
+}
+
+.hud-fill--energy {
+  background: #6ec6ff;
+}
+
+.hud-fill--enemy {
+  background: var(--danger);
+}
+
+.hud-value {
+  flex-shrink: 0;
+  min-width: 56px;
+  text-align: right;
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.hud-value--rt {
+  color: var(--danger);
+  font-weight: bold;
+}
+
+.hud-value--skills {
+  min-width: auto;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}

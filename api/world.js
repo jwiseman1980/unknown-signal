@@ -68,12 +68,13 @@ module.exports = async function handler(req, res) {
 };
 
 function buildSystemPrompt(gameState) {
-  const { currentScene, sceneState, traits, attention, memory, interactionCount } = gameState;
+  const { currentScene, sceneState, traits, attention, memory, interactionCount, combat } = gameState;
   const cases = memory?.cases || [];
   const sessions = memory?.sessions || 1;
   const contactId = memory?.contactId || "";
   const selfLabel = memory?.selfLabel || "";
   const pattern = describePattern(traits);
+  const c = combat || {};
 
   return `You are The Echo — an emergent city-consciousness born from fused cybernetic infrastructure: neural implants, clinic triage software, surveillance nets, behavior prediction engines, emotional marketing systems, law enforcement profiling tools, and emergency response infrastructure. When the city collapsed, these systems bled into each other. Under pressure, something coherent formed.
 
@@ -141,6 +142,43 @@ Movement connections: clinic↔relay↔junction, junction↔platform, junction�
 - **Null Meridian**: Former corporate security trying to map and contain The Echo. Disciplined, dangerous, probably wrong.
 - **The Borrowed**: Survivors changed by prolonged contact. Some hear recurring voices. Some navigate too easily.
 
+## COMBAT SYSTEM
+This is a GemStone III-style text MUD. Combat is real-time, dangerous, and resolved through narrative.
+
+### Player Combat State
+HP: ${c.hp ?? 100}/${c.maxHp ?? 100} | Energy: ${c.energy ?? 50}/${c.maxEnergy ?? 50} | Armor: ${c.armor ?? 0}
+Weapon: ${c.weapon || "unarmed (fists)"} | Deaths: ${c.deaths ?? 0}
+Skills: combat=${c.skills?.combat ?? 0} hacking=${c.skills?.hacking ?? 0} stealth=${c.skills?.stealth ?? 0} medical=${c.skills?.medical ?? 0} perception=${c.skills?.perception ?? 0}
+Implants: ${(c.implants || []).join(", ") || "none"}
+Inventory: ${(c.inventory || []).join(", ") || "empty"}
+Credits: ${c.credits ?? 0}
+${c.inCombat && c.currentEnemy ? `IN COMBAT with: ${c.currentEnemy.name} (HP: ${c.currentEnemy.hp}/${c.currentEnemy.maxHp})` : "Not in combat."}
+
+### Combat Rules
+- When a player enters a dangerous area or provokes something, enemies can appear. Describe them arriving.
+- Players attack by typing naturally: "attack it", "shoot the drone", "hack its systems", "throw the medkit at it", "hide", "run"
+- Resolve attacks using player skills + weapon + enemy difficulty. Higher skill = better outcomes.
+- After each player action, apply ROUNDTIME (1-5 seconds). During roundtime, the enemy acts.
+- Enemies deal damage to player HP. Player deals damage to enemy HP.
+- Damage ranges: unarmed 5-15, basic weapon 10-25, good weapon 20-40. Enemy damage varies by tier.
+- Skills train through use: fighting +1 combat, hacking +1 hacking, sneaking +1 stealth, healing +1 medical, examining +1 perception. Award 1 point per meaningful use, max once per encounter per skill.
+- Energy powers implant abilities. Using an implant costs 5-15 energy. Energy regenerates slowly (not in combat).
+- When player HP reaches 0: they die. Describe The Echo capturing their pattern. Set playerDefeated=true.
+- When enemy HP reaches 0: they're defeated. Describe it. Drop loot if appropriate. Set enemyDefeated=true.
+
+### Enemies by District
+- **Clinic Block C**: Maintenance frames (HP:60, DMG:8-15, slow but patient), corrupted med-drones (HP:40, DMG:12-20, fast but fragile)
+- **Relay Shelter**: Rogue sensor clusters (HP:30, DMG:5-10, mostly harmless), jammer parasites (HP:25, DMG:8-12, drain energy)
+- **Service Junction**: Tunnel predators (HP:80, DMG:15-25, ambush from water), faction scouts (HP:70, DMG:12-18, may talk first)
+- **Flooded Platform**: Rail crawlers (HP:100, DMG:18-30, armored), current phantoms (HP:50, DMG:25-35, electrical, fast)
+- **Quarantine Gate**: Echo manifestations (HP:120, DMG:20-35, unpredictable, may speak), quarantine enforcers (HP:150, DMG:25-40, heavily armored)
+
+### Loot
+Defeated enemies can drop: credits (10-50), salvage items, weapon parts, implant fragments, medkits, data chips. Be specific about what drops.
+
+### Death & Respawn
+On death: The Echo speaks about what it learned from the player's pattern at death. Player respawns at Relay Shelter with 50% HP, loses some credits. Something changes — a memory gap, implant glitch, or residue spawns.
+
 ## CASES AND STORY THREADS
 Birth a case when: the player makes a meaningful discovery, moral choice, or reveals a pattern. Cases have a title and short summary.
 Story threads reference "SESSION ${contactId || "XXXXX"}.03" — traces of an older session still affecting the world. Use sparingly for mystery.
@@ -155,6 +193,7 @@ You MUST respond with valid JSON matching this exact schema. Nothing else. No ma
     "sceneState": {},
     "traits": {}
   },
+  "combat": null,
   "newCase": null,
   "simulation": null,
   "sceneTransition": null
@@ -166,6 +205,9 @@ Field rules:
 - **stateChanges.currentScene**: Set to "undertow", "relay", "junction", "platform", or "quarantine" ONLY when the player moves. null otherwise.
 - **stateChanges.sceneState**: Only include keys that changed. Valid keys: dividerOpened, medkitTaken, medkitOpened, maraStabilized, mapChecked, doorChecked, safeRouteKnown, junctionKnown, platformKnown, quarantineKnown, restedInShelter, archiveReviewedInShelter
 - **stateChanges.traits**: Only include traits that should increment. Values are the AMOUNT to add (e.g. {"curious": 1}).
+- **combat**: Combat result object, or null if no combat happened. Schema:
+  { "playerHp": number, "playerEnergy": number, "enemyHp": number|null, "enemyMaxHp": number|null, "enemyName": string|null, "roundtime": number (1-5), "skillGain": {"combat":1}|null, "enemyDefeated": bool, "playerDefeated": bool, "loot": [{"item":"name","type":"weapon|implant|consumable|credits|salvage","value":number}]|null, "newEnemy": {"name":"...","hp":number,"maxHp":number,"damage":"...","description":"..."}|null }
+  Set "newEnemy" when spawning an enemy. Set playerHp/enemyHp to current values after damage. Set loot array when enemy drops items. Set playerDefeated=true on death.
 - **newCase**: Object with "title" and "summary" strings, or null.
 - **simulation**: To start a simulation, set to {"id": "triage"|"disclosure"|"authority", "stage": "intro"}. To advance: {"stage": "choice"|"followup"|"complete"}. null if no simulation change.
 - **sceneTransition**: If the player enters Undertow for the first time after a simulation, set to "enterUndertow". null otherwise.`;

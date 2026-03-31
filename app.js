@@ -76,6 +76,29 @@ const state = {
     checked: false,
   },
   aiAvailable: null,
+  combat: {
+    hp: 100,
+    maxHp: 100,
+    energy: 50,
+    maxEnergy: 50,
+    armor: 0,
+    roundtime: 0,
+    inCombat: false,
+    currentEnemy: null,
+    skills: {
+      combat: 0,
+      hacking: 0,
+      stealth: 0,
+      medical: 0,
+      perception: 0,
+    },
+    implants: [],
+    inventory: [],
+    weapon: null,
+    credits: 0,
+    deaths: 0,
+  },
+  roundtimeTimer: null,
   echoQueue: Promise.resolve(),
   speechQueue: Promise.resolve(),
   preferredVoice: null,
@@ -489,6 +512,21 @@ async function callWorldAPI(input, fromVoice) {
     } : {},
     activeSimulation: state.activeSimulation,
     openingCaseCompleted: state.openingCaseCompleted,
+    combat: {
+      hp: state.combat.hp,
+      maxHp: state.combat.maxHp,
+      energy: state.combat.energy,
+      maxEnergy: state.combat.maxEnergy,
+      armor: state.combat.armor,
+      inCombat: state.combat.inCombat,
+      currentEnemy: state.combat.currentEnemy,
+      skills: { ...state.combat.skills },
+      implants: [...state.combat.implants],
+      inventory: [...state.combat.inventory],
+      weapon: state.combat.weapon,
+      credits: state.combat.credits,
+      deaths: state.combat.deaths,
+    },
     recentMessages,
   };
 
@@ -576,6 +614,80 @@ async function callWorldAPI(input, fromVoice) {
       }
     }
 
+    // Apply combat results
+    if (result.combat) {
+      const cb = result.combat;
+
+      if (typeof cb.playerHp === "number") state.combat.hp = Math.max(0, Math.min(cb.playerHp, state.combat.maxHp));
+      if (typeof cb.playerEnergy === "number") state.combat.energy = Math.max(0, Math.min(cb.playerEnergy, state.combat.maxEnergy));
+
+      // New enemy spawned
+      if (cb.newEnemy) {
+        state.combat.currentEnemy = {
+          name: cb.newEnemy.name,
+          hp: cb.newEnemy.hp,
+          maxHp: cb.newEnemy.maxHp,
+          damage: cb.newEnemy.damage || "",
+          description: cb.newEnemy.description || "",
+        };
+        state.combat.inCombat = true;
+      }
+
+      // Update enemy HP
+      if (typeof cb.enemyHp === "number" && state.combat.currentEnemy) {
+        state.combat.currentEnemy.hp = Math.max(0, cb.enemyHp);
+      }
+
+      // Skill gains
+      if (cb.skillGain && typeof cb.skillGain === "object") {
+        for (const [skill, amount] of Object.entries(cb.skillGain)) {
+          if (skill in state.combat.skills && typeof amount === "number") {
+            state.combat.skills[skill] += amount;
+          }
+        }
+      }
+
+      // Roundtime
+      if (typeof cb.roundtime === "number" && cb.roundtime > 0) {
+        state.combat.roundtime = cb.roundtime;
+        startRoundtimeCountdown(cb.roundtime);
+      }
+
+      // Loot
+      if (Array.isArray(cb.loot)) {
+        for (const drop of cb.loot) {
+          if (drop.type === "credits" && typeof drop.value === "number") {
+            state.combat.credits += drop.value;
+          } else if (drop.type === "weapon") {
+            state.combat.weapon = drop.item;
+          } else if (drop.type === "implant") {
+            state.combat.implants.push(drop.item);
+          } else if (drop.item) {
+            state.combat.inventory.push(drop.item);
+          }
+        }
+      }
+
+      // Enemy defeated
+      if (cb.enemyDefeated) {
+        state.combat.currentEnemy = null;
+        state.combat.inCombat = false;
+      }
+
+      // Player death
+      if (cb.playerDefeated) {
+        state.combat.deaths += 1;
+        state.combat.hp = Math.floor(state.combat.maxHp * 0.5);
+        state.combat.energy = Math.floor(state.combat.maxEnergy * 0.5);
+        state.combat.currentEnemy = null;
+        state.combat.inCombat = false;
+        state.combat.credits = Math.max(0, state.combat.credits - Math.floor(state.combat.credits * 0.2));
+        applySceneTransition("relay");
+      }
+
+      updateCombatHud();
+    }
+
     // Birth cases
     if (result.newCase && result.newCase.title) {
       createCase(result.newCase.title, result.newCase.summary || "");
@@ -621,6 +733,72 @@ function applySceneTransition(sceneName) {
   undertowSummary.textContent = sceneSummaries[sceneName] || "";
   undertowPanel.classList.remove("hidden");
   transitionPanel.classList.add("hidden");
+  // Show combat HUD once player enters the world
+  document.querySelector("#combatHud").classList.remove("hidden");
+  updateCombatHud();
+}
+
+function updateCombatHud() {
+  const c = state.combat;
+  const hpPct = c.maxHp ? Math.round((c.hp / c.maxHp) * 100) : 100;
+  const enPct = c.maxEnergy ? Math.round((c.energy / c.maxEnergy) * 100) : 100;
+
+  document.querySelector("#hpFill").style.width = `${hpPct}%`;
+  document.querySelector("#hpText").textContent = `${c.hp}/${c.maxHp}`;
+  document.querySelector("#energyFill").style.width = `${enPct}%`;
+  document.querySelector("#energyText").textContent = `${c.energy}/${c.maxEnergy}`;
+
+  // HP bar color changes when low
+  const hpFill = document.querySelector("#hpFill");
+  if (hpPct <= 25) {
+    hpFill.style.background = "var(--danger)";
+  } else if (hpPct <= 50) {
+    hpFill.style.background = "#f7c948";
+  } else {
+    hpFill.style.background = "";
+  }
+
+  // Enemy
+  const enemyRow = document.querySelector("#enemyHudRow");
+  if (c.currentEnemy) {
+    const ePct = c.currentEnemy.maxHp ? Math.round((c.currentEnemy.hp / c.currentEnemy.maxHp) * 100) : 100;
+    document.querySelector("#enemyName").textContent = c.currentEnemy.name;
+    document.querySelector("#enemyFill").style.width = `${ePct}%`;
+    document.querySelector("#enemyHpText").textContent = `${c.currentEnemy.hp}/${c.currentEnemy.maxHp}`;
+    enemyRow.classList.remove("hidden");
+  } else {
+    enemyRow.classList.add("hidden");
+  }
+
+  // Skills
+  const sk = c.skills;
+  document.querySelector("#skillsSummary").textContent =
+    `CMB:${sk.combat} HCK:${sk.hacking} STL:${sk.stealth} MED:${sk.medical} PRC:${sk.perception}`;
+}
+
+function startRoundtimeCountdown(seconds) {
+  const rtRow = document.querySelector("#roundtimeRow");
+  const rtText = document.querySelector("#roundtimeText");
+  rtRow.classList.remove("hidden");
+
+  if (state.roundtimeTimer) {
+    clearInterval(state.roundtimeTimer);
+  }
+
+  state.combat.roundtime = seconds;
+  rtText.textContent = `${seconds}s`;
+
+  state.roundtimeTimer = setInterval(() => {
+    state.combat.roundtime -= 1;
+    if (state.combat.roundtime <= 0) {
+      state.combat.roundtime = 0;
+      rtRow.classList.add("hidden");
+      clearInterval(state.roundtimeTimer);
+      state.roundtimeTimer = null;
+    } else {
+      rtText.textContent = `${state.combat.roundtime}s`;
+    }
+  }, 1000);
 }
 
 function addMessage(role, text) {
@@ -654,7 +832,7 @@ function queueEchoReplies(replies, fromVoice) {
         for (const reply of replies) {
           window.setTimeout(() => {
             addMessage("echo", reply);
-            if (fromVoice) {
+            if (state.voiceEnabled) {
               speak(reply);
             }
           }, delay);
@@ -1057,24 +1235,54 @@ async function writeClipboard(text) {
 }
 
 function speak(text) {
-  if (!synth) {
-    return;
+  state.speechQueue = state.speechQueue.then(() => speakAIVoice(text).catch(() => speakBrowserTTS(text)));
+}
+
+async function speakAIVoice(text) {
+  const response = await fetch(`${API_BASE}/voice`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    throw new Error("voice api unavailable");
   }
 
-  state.speechQueue = state.speechQueue.then(
-    () =>
-      new Promise((resolve) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.98;
-        utterance.pitch = 0.92;
-        if (state.preferredVoice) {
-          utterance.voice = state.preferredVoice;
-        }
-        utterance.addEventListener("end", resolve, { once: true });
-        utterance.addEventListener("error", resolve, { once: true });
-        synth.speak(utterance);
-      })
-  );
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(url);
+    audio.playbackRate = 0.95;
+    audio.addEventListener("ended", () => {
+      URL.revokeObjectURL(url);
+      resolve();
+    }, { once: true });
+    audio.addEventListener("error", () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("audio playback failed"));
+    }, { once: true });
+    audio.play().catch(reject);
+  });
+}
+
+function speakBrowserTTS(text) {
+  if (!synth) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.85;
+    utterance.pitch = 0.72;
+    if (state.preferredVoice) {
+      utterance.voice = state.preferredVoice;
+    }
+    utterance.addEventListener("end", resolve, { once: true });
+    utterance.addEventListener("error", resolve, { once: true });
+    synth.speak(utterance);
+  });
 }
 
 function pickPreferredVoice(voices) {
