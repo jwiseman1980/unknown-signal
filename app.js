@@ -75,6 +75,7 @@ const state = {
     available: false,
     checked: false,
   },
+  aiAvailable: null,
   echoQueue: Promise.resolve(),
   speechQueue: Promise.resolve(),
   preferredVoice: null,
@@ -251,6 +252,7 @@ function boot() {
   setupSpeechRecognition();
   setupSpeechSynthesis();
   initializeRemoteContact();
+  probeAIAvailability();
   queueIntro();
 }
 
@@ -289,6 +291,26 @@ function setupSpeechSynthesis() {
   assignVoice();
   if ("onvoiceschanged" in synth) {
     synth.onvoiceschanged = assignVoice;
+  }
+}
+
+async function probeAIAvailability() {
+  try {
+    const response = await fetch(`${API_BASE}/world`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: "__probe__",
+        gameState: { interactionCount: 0, currentScene: null, sceneState: {}, traits: { guarded: 0, confessional: 0, controlling: 0, curious: 0, performative: 0, vulnerable: 0 }, attention: 0, memory: {}, recentMessages: [] },
+      }),
+    });
+    state.aiAvailable = response.ok;
+    if (state.aiAvailable) {
+      console.log("AI world interpreter: online");
+    }
+  } catch (error) {
+    state.aiAvailable = false;
+    console.log("AI world interpreter: offline, using local handlers");
   }
 }
 
@@ -423,12 +445,20 @@ function submitInput(text, fromVoice) {
   updateInsights();
   recordExchange(text);
 
-  const replies = state.activeSimulation
-    ? handleSimulationInput(text)
-    : state.currentScene
-      ? handleSceneInput(text)
-      : buildEchoReply(text, fromVoice);
-  queueEchoReplies(replies, fromVoice);
+  // Use AI for everything after intro starts
+  if (state.aiAvailable !== false) {
+    setComposerEnabled(false);
+    idleIndicator.classList.remove("hidden");
+    callWorldAPI(text, fromVoice);
+  } else {
+    // Fallback to hardcoded handlers if AI unavailable
+    const replies = state.activeSimulation
+      ? handleSimulationInput(text)
+      : state.currentScene
+        ? handleSceneInput(text)
+        : buildEchoReply(text, fromVoice);
+    queueEchoReplies(replies, fromVoice);
+  }
 
   if (state.interactionCount >= 5 && !state.voiceEnabled) {
     voiceToggle.classList.remove("hidden");
@@ -437,6 +467,160 @@ function submitInput(text, fromVoice) {
   if (state.interactionCount >= 4) {
     refreshTransitionPanel();
   }
+}
+
+async function callWorldAPI(input, fromVoice) {
+  const recentMessages = state.messages.slice(-20).map((m) => ({
+    role: m.role === "echo" ? "echo" : "player",
+    text: m.text,
+  }));
+
+  const gameState = {
+    interactionCount: state.interactionCount,
+    currentScene: state.currentScene,
+    sceneState: { ...state.sceneState },
+    traits: { ...state.traits },
+    attention: state.attention,
+    memory: state.memory ? {
+      contactId: state.memory.contactId || "",
+      sessions: state.memory.sessions || 1,
+      cases: (state.memory.cases || []).slice(0, 6),
+      selfLabel: state.memory.selfLabel || "",
+    } : {},
+    activeSimulation: state.activeSimulation,
+    openingCaseCompleted: state.openingCaseCompleted,
+    recentMessages,
+  };
+
+  try {
+    const response = await fetch(`${API_BASE}/world`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input, gameState }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.ok || !data.result) {
+      throw new Error("Invalid API response");
+    }
+
+    const result = data.result;
+
+    // Apply state changes
+    if (result.stateChanges) {
+      const sc = result.stateChanges;
+
+      // Scene state updates
+      if (sc.sceneState && typeof sc.sceneState === "object") {
+        for (const [key, val] of Object.entries(sc.sceneState)) {
+          if (key in state.sceneState) {
+            state.sceneState[key] = val;
+          }
+        }
+      }
+
+      // Trait increments
+      if (sc.traits && typeof sc.traits === "object") {
+        for (const [key, val] of Object.entries(sc.traits)) {
+          if (key in state.traits && typeof val === "number") {
+            state.traits[key] += val;
+          }
+        }
+        state.attention = Math.min(
+          4,
+          Math.floor(
+            (state.traits.guarded +
+              state.traits.confessional +
+              state.traits.controlling +
+              state.traits.curious +
+              state.traits.performative +
+              state.traits.vulnerable) / 4
+          )
+        );
+        updateInsights();
+      }
+
+      // Scene transition
+      if (sc.currentScene && sc.currentScene !== state.currentScene) {
+        applySceneTransition(sc.currentScene);
+      }
+    }
+
+    // Handle scene transition signal
+    if (result.sceneTransition === "enterUndertow" && !state.currentScene) {
+      applySceneTransition("undertow");
+    }
+
+    // Handle simulation changes
+    if (result.simulation) {
+      if (result.simulation.stage === "intro" && !state.activeSimulation) {
+        state.activeSimulation = {
+          id: result.simulation.id,
+          stage: "choice",
+          choice: null,
+        };
+      } else if (result.simulation.stage === "complete" && state.activeSimulation) {
+        state.openingCaseCompleted = true;
+        state.openingSimulationId = state.activeSimulation.id;
+        state.activeSimulation = null;
+        refreshTransitionPanel();
+      } else if (state.activeSimulation && result.simulation.stage) {
+        state.activeSimulation.stage = result.simulation.stage;
+        if (result.simulation.choice) {
+          state.activeSimulation.choice = result.simulation.choice;
+        }
+      }
+    }
+
+    // Birth cases
+    if (result.newCase && result.newCase.title) {
+      createCase(result.newCase.title, result.newCase.summary || "");
+    }
+
+    // Queue the reply lines
+    const replies = Array.isArray(result.replies) ? result.replies : ["The city shifts but offers no clear answer."];
+    queueEchoReplies(replies, fromVoice);
+
+  } catch (error) {
+    console.error("World API call failed, falling back to local:", error);
+    state.aiAvailable = false;
+
+    // Fall back to hardcoded handlers
+    const replies = state.activeSimulation
+      ? handleSimulationInput(input)
+      : state.currentScene
+        ? handleSceneInput(input)
+        : buildEchoReply(input, fromVoice);
+    queueEchoReplies(replies, fromVoice);
+  }
+}
+
+function applySceneTransition(sceneName) {
+  const sceneNames = {
+    undertow: "Undertow - Clinic Block C",
+    relay: "Relay Shelter",
+    junction: "Undertow - Service Junction",
+    platform: "Undertow - Flooded Platform",
+    quarantine: "Undertow - Quarantine Gate",
+  };
+
+  const sceneSummaries = {
+    undertow: "Recovery chamber unlocked. Clinic Block C is half-flooded and losing power. Mara is bleeding behind a divider. Iven is trying not to panic. Something metallic is scraping at the clinic door.",
+    relay: "A dry relay room hums behind reinforced shutters. Someone converted it into a shelter with scavenged chairs, power cells, old med blankets, and a terminal that still flickers when the city spikes.",
+    junction: "A maintenance nexus splits the district into workable danger. One tunnel returns to Clinic Block C, one climbs back to the relay shelter, one descends to a flooded platform, and one ends at a sealed quarantine gate.",
+    platform: "The platform is ankle-deep in black water and lit by broken train signage. A stalled evac car leans at the far end. The rails hum with intermittent power.",
+    quarantine: "A reinforced gate seals off the deeper quarantine wing. The lock remains powered. A dead scanner watches the corridor like it still expects order to mean something.",
+  };
+
+  state.currentScene = sceneName;
+  sceneTitle.textContent = sceneNames[sceneName] || sceneName;
+  undertowSummary.textContent = sceneSummaries[sceneName] || "";
+  undertowPanel.classList.remove("hidden");
+  transitionPanel.classList.add("hidden");
 }
 
 function addMessage(role, text) {
