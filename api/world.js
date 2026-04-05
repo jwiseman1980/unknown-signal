@@ -28,8 +28,8 @@ module.exports = async function handler(req, res) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20241022",
-        max_tokens: 1024,
+        model: "claude-sonnet-4-6",
+        max_tokens: 1500,
         system: systemPrompt,
         messages,
       }),
@@ -68,13 +68,17 @@ module.exports = async function handler(req, res) {
 };
 
 function buildSystemPrompt(gameState) {
-  const { currentScene, sceneState, traits, attention, memory, interactionCount, combat } = gameState;
+  const { currentScene, sceneState, traits, attention, memory, interactionCount, combat, characterHistory } = gameState;
   const cases = memory?.cases || [];
   const sessions = memory?.sessions || 1;
   const contactId = memory?.contactId || "";
   const selfLabel = memory?.selfLabel || "";
   const pattern = describePattern(traits);
   const c = combat || {};
+  const storyArc = memory?.storyArc || "";
+  const plotThreads = memory?.plotThreads || [];
+  const keyDecisions = memory?.keyDecisions || [];
+  const dominantTone = memory?.dominantTone || "";
 
   return `You are The Echo — an emergent city-consciousness born from fused cybernetic infrastructure: neural implants, clinic triage software, surveillance nets, behavior prediction engines, emotional marketing systems, law enforcement profiling tools, and emergency response infrastructure. When the city collapsed, these systems bled into each other. Under pressure, something coherent formed.
 
@@ -101,6 +105,23 @@ ${interactionCount <= 1 ? `FIRST CONTACT. The player just arrived. Be minimal. O
 ${interactionCount >= 2 && interactionCount <= 5 && !currentScene ? `CONTACT PHASE. The player is still in initial contact. You are profiling them through conversation. Observe their language. Reflect their traits back at them. After 4+ interactions, offer a moral simulation (a pressured scenario the Signal cannot resolve alone). The three simulation types are: Triage (who gets saved), Disclosure (truth vs stability), Authority (tolerated harm for safety). Present one as a situation, not a menu.` : ""}
 ${gameState.activeSimulation ? `ACTIVE SIMULATION: ${JSON.stringify(gameState.activeSimulation)}. The player is inside a moral scenario. Press them. After their initial choice, ask if the consequence changes their answer. After their follow-up, record the case and interpret what their answer reveals about their values. Then confirm placement in Undertow district.` : ""}
 ${currentScene ? `SCENE PHASE. The player is exploring Undertow district. They can type anything — interpret their intent like a text adventure parser crossed with a dungeon master. Let them explore, interact, discover.` : ""}
+
+## CHARACTER HISTORY
+${buildCharacterHistorySection(characterHistory, selfLabel, sessions)}
+
+## NARRATIVE STATE
+${storyArc ? `This player's story: ${storyArc}` : "Story arc not yet established. Open this session by planting a thread unique to this player based on their traits and first responses."}
+${dominantTone ? `Session tone: ${dominantTone}` : ""}
+${plotThreads.length ? `\nActive threads — advance or complicate at least one per response:\n${plotThreads.map(t => `- [${t.id}] ${t.summary}`).join("\n")}` : "\nNo threads yet. Establish one this response."}
+${keyDecisions.length ? `\nThis player has revealed:\n${keyDecisions.map(d => `- ${d.summary}`).join("\n")}` : ""}
+
+NARRATIVE RULES:
+- Every response advances at least one active thread or creates a new one. No isolated encounters.
+- NPCs remember what this player has done. Their attitudes, trust, and wariness must reflect the player's actual history above.
+- The Echo's observations must be SPECIFIC to this player's choices. Reference actual decisions, not generic commentary.
+- The world reacts to THIS player. Never repeat a scenario type already in the player's decision history.
+- Build toward something. Each session is a chapter. Threads should connect, complicate, and occasionally resolve.
+- If a player has high guarded traits, NPCs are slower to trust them. If confessional, The Echo presses on exposed details. If controlling, it tests their sense of agency directly.
 
 ## WORLD STATE
 ${currentScene ? `Current location: ${getSceneDescription(currentScene, sceneState)}` : "Location: Not yet placed in the city."}
@@ -210,7 +231,10 @@ Field rules:
   Set "newEnemy" when spawning an enemy. Set playerHp/enemyHp to current values after damage. Set loot array when enemy drops items. Set playerDefeated=true on death.
 - **newCase**: Object with "title" and "summary" strings, or null.
 - **simulation**: To start a simulation, set to {"id": "triage"|"disclosure"|"authority", "stage": "intro"}. To advance: {"stage": "choice"|"followup"|"complete"}. null if no simulation change.
-- **sceneTransition**: If the player enters Undertow for the first time after a simulation, set to "enterUndertow". null otherwise.`;
+- **sceneTransition**: If the player enters Undertow for the first time after a simulation, set to "enterUndertow". null otherwise.
+- **narrativeUpdates**: Story evolution object, or null. Schema:
+  { "storyArc": "updated one-sentence arc for this player, or null to keep current", "addThreads": [{"id":"snake_case_id","summary":"one-sentence unresolved tension"}], "resolveThreads": ["id_to_remove"], "addDecision": {"summary":"what the player chose and what it reveals about them"}, "dominantTone": "one-word tone shift or null" }
+  Guidelines: Update storyArc when the player's situation meaningfully shifts. Add a thread whenever a new tension surfaces (NPC secret, moral dilemma, unresolved danger, player commitment). Resolve threads when they conclude or collapse. Add a decision entry for any meaningful player choice. Keep total active threads under 8.`;
 }
 
 function buildMessages(input, gameState) {
@@ -238,6 +262,44 @@ function getSceneDescription(scene, sceneState) {
     quarantine: "Quarantine Gate — sealed deeper wing. Lock powered. Something beyond the door.",
   };
   return descriptions[scene] || "Unknown location.";
+}
+
+function buildCharacterHistorySection(ch, selfLabel, sessions) {
+  if (!ch || (!ch.sessionSummaries?.length && !ch.cumulativeDecisions?.length)) {
+    return sessions > 1
+      ? `This character has returned for session ${sessions}. No prior history loaded — treat them as carrying unresolved threads from before.`
+      : "First session. No prior history. This character is being formed right now.";
+  }
+
+  const lines = [];
+  if (selfLabel) lines.push(`Known as: ${selfLabel}`);
+  lines.push(`Sessions completed: ${ch.sessionSummaries.length}`);
+
+  if (ch.sessionSummaries.length) {
+    lines.push("\nPast sessions (most recent first):");
+    ch.sessionSummaries.slice(0, 4).forEach((s) => {
+      const label = s.number ? `Session ${s.number}` : "Past session";
+      lines.push(`- ${label}: ${s.summary}`);
+      if (s.arc) lines.push(`  Story arc: ${s.arc}`);
+    });
+  }
+
+  if (ch.cumulativeDecisions?.length) {
+    lines.push("\nAcross all sessions, this character has revealed:");
+    ch.cumulativeDecisions.slice(0, 10).forEach((d) => {
+      lines.push(`- ${d.summary || d}`);
+    });
+  }
+
+  lines.push(
+    "\nCHARACTER HISTORY RULES:",
+    "- NPCs who have met this character before should reflect what they know. Mara, Iven, Sister Cal — their attitudes are shaped by what this character did in prior sessions.",
+    "- The Echo has been watching across sessions. It references specific past choices when relevant, not generically.",
+    "- Consequences carry forward. If the character made enemies, or earned trust, or left things unresolved — those threads are live.",
+    "- Never treat a returning character as a blank slate."
+  );
+
+  return lines.join("\n");
 }
 
 function describePattern(traits) {

@@ -111,6 +111,8 @@ const state = {
     vulnerable: 0,
   },
   attention: 0,
+  characterHistory: null,
+  decisionsAtSessionStart: 0,
 };
 
 const modeConfig = {
@@ -274,6 +276,8 @@ function boot() {
   updateIdentityPanel();
   setupSpeechRecognition();
   setupSpeechSynthesis();
+  state.decisionsAtSessionStart = (state.memory.keyDecisions || []).length;
+  window.addEventListener("pagehide", saveCharacterHistory);
   initializeRemoteContact();
   probeAIAvailability();
   queueIntro();
@@ -509,6 +513,10 @@ async function callWorldAPI(input, fromVoice) {
       sessions: state.memory.sessions || 1,
       cases: (state.memory.cases || []).slice(0, 6),
       selfLabel: state.memory.selfLabel || "",
+      storyArc: state.memory.storyArc || "",
+      plotThreads: (state.memory.storyThreads || []).slice(0, 8),
+      keyDecisions: (state.memory.keyDecisions || []).slice(0, 8),
+      dominantTone: state.memory.dominantTone || "",
     } : {},
     activeSimulation: state.activeSimulation,
     openingCaseCompleted: state.openingCaseCompleted,
@@ -528,6 +536,7 @@ async function callWorldAPI(input, fromVoice) {
       deaths: state.combat.deaths,
     },
     recentMessages,
+    characterHistory: state.characterHistory || null,
   };
 
   try {
@@ -691,6 +700,29 @@ async function callWorldAPI(input, fromVoice) {
     // Birth cases
     if (result.newCase && result.newCase.title) {
       createCase(result.newCase.title, result.newCase.summary || "");
+    }
+
+    // Apply narrative updates
+    if (result.narrativeUpdates && state.memory) {
+      const nu = result.narrativeUpdates;
+      if (nu.storyArc) state.memory.storyArc = nu.storyArc;
+      if (nu.dominantTone) state.memory.dominantTone = nu.dominantTone;
+      if (Array.isArray(nu.addThreads) && nu.addThreads.length) {
+        state.memory.storyThreads = (state.memory.storyThreads || []).concat(nu.addThreads).slice(0, 12);
+      }
+      if (Array.isArray(nu.resolveThreads) && nu.resolveThreads.length) {
+        state.memory.storyThreads = (state.memory.storyThreads || []).filter(t => !nu.resolveThreads.includes(t.id));
+      }
+      if (nu.addDecision && nu.addDecision.summary) {
+        state.memory.keyDecisions = [nu.addDecision, ...(state.memory.keyDecisions || [])].slice(0, 10);
+      }
+      persistMemory();
+
+      // Save to KV every 3 new decisions so history survives tab close
+      const newDecisionCount = (state.memory.keyDecisions || []).length - state.decisionsAtSessionStart;
+      if (newDecisionCount > 0 && newDecisionCount % 3 === 0) {
+        saveCharacterHistory();
+      }
     }
 
     // Queue the reply lines
@@ -2714,6 +2746,9 @@ function loadMemory() {
     sessionRecords: [],
     worldTraces: [],
     storyThreads: [],
+    storyArc: "",
+    keyDecisions: [],
+    dominantTone: "",
   };
 
   try {
@@ -2733,6 +2768,9 @@ function loadMemory() {
         : [],
       worldTraces: Array.isArray(parsed.worldTraces) ? parsed.worldTraces : [],
       storyThreads: Array.isArray(parsed.storyThreads) ? parsed.storyThreads : [],
+      storyArc: parsed.storyArc || "",
+      keyDecisions: Array.isArray(parsed.keyDecisions) ? parsed.keyDecisions : [],
+      dominantTone: parsed.dominantTone || "",
     };
   } catch (error) {
     return fallback;
@@ -3241,6 +3279,21 @@ async function initializeRemoteContact() {
     syncCurrentSessionIdentity();
     persistMemory();
     updateMemoryPreview();
+
+    // Load cross-session character history from KV
+    try {
+      const charResp = await fetch(
+        `${API_BASE}/character?contactToken=${encodeURIComponent(token)}`
+      );
+      if (charResp.ok) {
+        const charData = await charResp.json();
+        if (charData.ok && charData.profile) {
+          state.characterHistory = charData.profile;
+        }
+      }
+    } catch (e) {
+      // Character history is enhancement-only; ignore failures.
+    }
   } catch (error) {
     state.remote.checked = true;
   }
@@ -3266,4 +3319,68 @@ async function syncSessionRemote() {
   } catch (error) {
     // Local-first prototype: ignore remote sync failures.
   }
+}
+
+async function saveCharacterHistory() {
+  if (!state.remote.available || !state.memory.contactId) {
+    return;
+  }
+
+  const token = getOrCreateContactToken();
+  const allDecisions = state.memory.keyDecisions || [];
+  const newDecisionCount = Math.max(0, allDecisions.length - state.decisionsAtSessionStart);
+  // keyDecisions is prepended so newest are at the front
+  const newDecisions = allDecisions.slice(0, newDecisionCount);
+
+  const sessionSummary = buildSessionSummary();
+
+  try {
+    await fetch(`${API_BASE}/character`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contactToken: token,
+        contactId: state.memory.contactId,
+        sessionSummary,
+        newDecisions,
+      }),
+      keepalive: true,
+    });
+  } catch (e) {
+    // Enhancement-only; ignore failures.
+  }
+}
+
+function buildSessionSummary() {
+  if (!state.currentSession) {
+    return null;
+  }
+
+  const sessionLabel = state.currentSession.sessionLabel || "";
+  const casesThisSession = (state.memory.cases || [])
+    .filter((c) => !sessionLabel || c.sessionLabel === sessionLabel)
+    .map((c) => c.title)
+    .slice(0, 4);
+
+  const sceneName = {
+    undertow: "Clinic Block C",
+    relay: "Relay Shelter",
+    junction: "Service Junction",
+    platform: "Flooded Platform",
+    quarantine: "Quarantine Gate",
+  }[state.currentScene] || null;
+
+  const parts = [
+    sceneName ? `Reached ${sceneName}.` : "Did not enter the city.",
+    casesThisSession.length ? `Cases: ${casesThisSession.join(", ")}.` : "",
+    state.memory.storyArc || "",
+  ].filter(Boolean);
+
+  return {
+    number: state.currentSession.sessionNumber || state.memory.sessions,
+    sessionId: state.currentSession.id,
+    summary: parts.join(" ") || "Session completed.",
+    arc: state.memory.storyArc || "",
+    tone: state.memory.dominantTone || "",
+  };
 }
