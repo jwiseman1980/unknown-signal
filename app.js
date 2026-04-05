@@ -38,6 +38,19 @@ const sceneTitle = document.querySelector("#sceneTitle");
 const undertowSummary = document.querySelector("#undertowSummary");
 const API_BASE = "/api";
 
+// ─────────────────────────────────────────────────────────────
+// TYPEWRITER ENGINE — MU-TH-UR 6000 / Matrix terminal aesthetic
+// ─────────────────────────────────────────────────────────────
+
+// Box-drawing chars + katakana fragments — brief corruption during typing
+const GLITCH_CHARS = "▓▒░╬╫╪╩╦╣═╔╗╚╝│┤├┼┬┴▀▄█▌▐ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍ";
+
+// True while user has clicked to skip current typing batch
+let _echoSkip = false;
+
+// Click anywhere in conversation area to skip typing
+conversationEl.addEventListener("click", () => { _echoSkip = true; });
+
 const state = {
   messages: [],
   interactionCount: 0,
@@ -284,6 +297,7 @@ function boot() {
   fetchWorldState();
   probeAIAvailability();
   queueIntro();
+  initMatrixRain();
 }
 
 function setupSpeechRecognition() {
@@ -859,43 +873,195 @@ function addMessage(role, text) {
   meta.textContent = role === "echo" ? "Unknown Signal" : "You";
 
   const body = document.createElement("div");
-  body.textContent = text;
-
   message.append(meta, body);
   conversationEl.appendChild(message);
   conversationEl.scrollTop = conversationEl.scrollHeight;
   idleIndicator.classList.add("hidden");
+
+  if (role === "echo") {
+    // Fire typewriter — returns Promise, callers may await or ignore
+    return startTypewriter(message, body, text, classifyEchoIntensity(text));
+  }
+
+  body.textContent = text;
+  return Promise.resolve();
 }
 
 function queueEchoReplies(replies, fromVoice) {
   setComposerEnabled(false);
   idleIndicator.classList.remove("hidden");
+  _echoSkip = false;
 
-  let delay = 120;
-  state.echoQueue = state.echoQueue.then(
-    () =>
-      new Promise((resolve) => {
-        for (const reply of replies) {
-          window.setTimeout(() => {
-            addMessage("echo", reply);
-            if (state.voiceEnabled) {
-              speak(reply);
-            }
-          }, delay);
-          delay += getEchoDelay(reply);
-        }
-
-        window.setTimeout(() => {
-          idleIndicator.classList.add("hidden");
-          setComposerEnabled(true);
-          resolve();
-        }, delay);
-      })
-  );
+  state.echoQueue = state.echoQueue.then(async () => {
+    await echoSleep(100);
+    for (let i = 0; i < replies.length; i++) {
+      await addMessage("echo", replies[i]);
+      if (state.voiceEnabled) speak(replies[i]);
+      // Pause between lines — skip if user clicked
+      if (i < replies.length - 1) await echoSleep(280);
+    }
+    idleIndicator.classList.add("hidden");
+    setComposerEnabled(true);
+  });
 }
 
-function getEchoDelay(text) {
-  return Math.min(1050, Math.max(320, 180 + text.length * 11));
+// ─────────────────────────────────────────────────────────────
+// Typewriter engine
+// ─────────────────────────────────────────────────────────────
+
+/** Sleep that resolves immediately when user has clicked to skip */
+function echoSleep(ms) {
+  if (_echoSkip) return Promise.resolve();
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/**
+ * Classify a line's intensity for typewriter speed and glitch probability.
+ * Short fragments and key phrases are more dramatic — slower, more corrupted.
+ */
+function classifyEchoIntensity(text) {
+  if (text.length < 28) return "dramatic";
+  const t = text.toLowerCase();
+  const phrases = ["you hesitated", "you chose", "you died", "i see you", "i am listening",
+    "pattern captured", "what hurts", "clarify that", "please continue", "the echo"];
+  if (phrases.some((p) => t.includes(p))) return "dramatic";
+  return "normal";
+}
+
+/**
+ * Per-character delay. Punctuation creates beat pauses like a real teleprinter.
+ */
+function getPrintDelay(char, base) {
+  const jitter = Math.random() * 10 - 5;
+  if (char === "." || char === "?" || char === "!") return base * 5.5 + jitter;
+  if (char === "," || char === ";" || char === ":") return base * 2.2 + jitter;
+  if (char === " ") return base * 0.65 + jitter;
+  return base + jitter;
+}
+
+/**
+ * Mount text span + cursor into bodyEl, type out characters one at a time.
+ * Returns a Promise that resolves when printing is complete.
+ */
+function startTypewriter(messageEl, bodyEl, text, intensity) {
+  const textSpan = document.createElement("span");
+  textSpan.className = "echo-text";
+  const cursorEl = document.createElement("span");
+  cursorEl.className = "echo-cursor";
+  cursorEl.textContent = "▋";
+  bodyEl.append(textSpan, cursorEl);
+
+  const base = intensity === "dramatic" ? 52 : 30;
+  const glitchProb = intensity === "dramatic" ? 0.055 : 0.018;
+
+  return new Promise((resolve) => {
+    let i = 0;
+
+    function tick() {
+      // User clicked — reveal everything now
+      if (_echoSkip) {
+        textSpan.textContent = text;
+        cursorEl.classList.add("echo-cursor--done");
+        resolve();
+        return;
+      }
+
+      if (i >= text.length) {
+        textSpan.textContent = text;
+        cursorEl.classList.add("echo-cursor--done");
+        resolve();
+        return;
+      }
+
+      const char = text[i];
+
+      // Glitch: briefly substitute a corruption char then correct
+      if (Math.random() < glitchProb && char.trim()) {
+        const wrong = GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+        textSpan.textContent = text.slice(0, i) + wrong;
+        // Flash the message element
+        messageEl.classList.add("glitching");
+        window.setTimeout(() => messageEl.classList.remove("glitching"), 120);
+        window.setTimeout(() => {
+          i++;
+          textSpan.textContent = text.slice(0, i);
+          conversationEl.scrollTop = conversationEl.scrollHeight;
+          window.setTimeout(tick, getPrintDelay(char, base) + 55);
+        }, 65);
+      } else {
+        i++;
+        textSpan.textContent = text.slice(0, i);
+        conversationEl.scrollTop = conversationEl.scrollHeight;
+        window.setTimeout(tick, getPrintDelay(char, base));
+      }
+    }
+
+    tick();
+  });
+}
+
+/**
+ * Matrix digital rain — faint background ambiance.
+ * Katakana + numerals falling in columns. Opacity kept very low so it reads
+ * as atmosphere, not distraction.
+ */
+function initMatrixRain() {
+  // Skip on low-performance or mobile preference
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "position:fixed;inset:0;pointer-events:none;opacity:0.055;z-index:0";
+  document.body.insertBefore(canvas, document.body.firstChild);
+
+  const ctx = canvas.getContext("2d");
+  const FONT_SIZE = 14;
+  // Katakana range + numerals
+  const CHARS = "ｦｧｨｩｪｫｬｭｮｯｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789";
+
+  let cols, drops;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    cols = Math.floor(canvas.width / FONT_SIZE);
+    drops = drops ? drops.slice(0, cols) : [];
+    while (drops.length < cols) drops.push(Math.random() * -canvas.height / FONT_SIZE);
+  }
+
+  resize();
+  window.addEventListener("resize", resize);
+
+  function draw() {
+    // Fade previous frame — controls trail length
+    ctx.fillStyle = "rgba(6, 7, 10, 0.08)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = `${FONT_SIZE}px "Courier New", monospace`;
+
+    for (let i = 0; i < drops.length; i++) {
+      const char = CHARS[Math.floor(Math.random() * CHARS.length)];
+      // Lead character is brightest
+      const y = drops[i] * FONT_SIZE;
+      const brightness = Math.random();
+      if (brightness > 0.92) {
+        ctx.fillStyle = "#dbffe3"; // bright flash
+      } else if (brightness > 0.7) {
+        ctx.fillStyle = "#8fffb6"; // mid green
+      } else {
+        ctx.fillStyle = "#2a6b3a"; // dim green
+      }
+      ctx.fillText(char, i * FONT_SIZE, y);
+
+      // Reset column when it passes screen bottom
+      if (y > canvas.height && Math.random() > 0.975) {
+        drops[i] = 0;
+      }
+      drops[i] += 0.35 + Math.random() * 0.25;
+    }
+  }
+
+  // ~18fps — enough for the effect, low enough to not compete with the game
+  setInterval(draw, 55);
 }
 
 function setComposerEnabled(enabled) {

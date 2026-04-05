@@ -25,27 +25,39 @@ body {
     linear-gradient(180deg, #010201 0%, #050605 50%, #020302 100%);
   color: var(--text);
   font-family: "Courier New", Courier, monospace;
+  animation: crt-flicker 18s steps(1) infinite;
 }
 
+/* CRT scanlines — tighter rows, more phosphor density */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.01),
-      rgba(255, 255, 255, 0) 28%
-    ),
     repeating-linear-gradient(
       180deg,
-      rgba(143, 255, 186, 0.02),
-      rgba(143, 255, 186, 0.02) 1px,
+      rgba(0, 0, 0, 0.18) 0px,
+      rgba(0, 0, 0, 0.18) 1px,
       transparent 1px,
-      transparent 3px
+      transparent 2px
     );
-  opacity: 0.52;
   pointer-events: none;
+  z-index: 9998;
+}
+
+/* CRT vignette — dark edges, bright center like a real phosphor tube */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 90% 80% at 50% 50%,
+    transparent 55%,
+    rgba(0, 0, 0, 0.55) 85%,
+    rgba(0, 0, 0, 0.88) 100%
+  );
+  pointer-events: none;
+  z-index: 9999;
 }
 
 .terminal-shell {
@@ -204,6 +216,11 @@ h2 {
 
 .message--echo {
   color: var(--accent-2);
+  /* Phosphor bloom — green text burning into the screen */
+  text-shadow:
+    0 0 6px rgba(219, 255, 227, 0.55),
+    0 0 16px rgba(143, 255, 186, 0.28),
+    0 0 32px rgba(143, 255, 186, 0.10);
 }
 
 .message--player {
@@ -372,6 +389,38 @@ select:focus-visible {
   100% {
     opacity: 0;
   }
+}
+
+/* CRT screen flicker — rare, subtle, like mains hum on an old monitor */
+@keyframes crt-flicker {
+  0%, 72%, 74%, 76%, 100% { opacity: 1; }
+  73% { opacity: 0.88; }
+  75% { opacity: 0.94; }
+}
+
+/* Typewriter cursor — block character, blinks like a terminal */
+.echo-cursor {
+  display: inline-block;
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(143, 255, 186, 0.9), 0 0 18px rgba(143, 255, 186, 0.5);
+  animation: blink 0.9s steps(1, end) infinite;
+  user-select: none;
+}
+
+.echo-cursor--done {
+  display: none;
+}
+
+/* Brief glitch flash on an echo message during corruption */
+@keyframes glitch-flash {
+  0%, 100% { opacity: 1; transform: none; }
+  25% { opacity: 0.7; transform: translateX(1px); }
+  50% { opacity: 1; transform: translateX(-1px) skewX(-0.3deg); }
+  75% { opacity: 0.85; transform: none; }
+}
+
+.message--echo.glitching {
+  animation: glitch-flash 0.12s steps(1) forwards;
 }
 
 @media (max-width: 720px) {
