@@ -299,6 +299,7 @@ function boot() {
   probeAIAvailability();
   queueIntro();
   initMatrixRain();
+  initAudioControls();
 }
 
 function setupSpeechRecognition() {
@@ -361,6 +362,7 @@ async function probeAIAvailability() {
 
 chatForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (window.audioEngine) window.audioEngine.start();
   submitInput(playerInput.value.trim(), false);
 });
 
@@ -759,6 +761,7 @@ async function callWorldAPI(input, fromVoice) {
       }
 
       updateCombatHud();
+      if (window.audioEngine) window.audioEngine.update(state);
     }
 
     // Birth cases
@@ -850,6 +853,7 @@ function applySceneTransition(sceneName) {
   // Show combat HUD once player enters the world
   document.querySelector("#combatHud").classList.remove("hidden");
   updateCombatHud();
+  if (window.audioEngine) window.audioEngine.update(state);
 }
 
 function updateCombatHud() {
@@ -945,6 +949,7 @@ function queueEchoReplies(replies, fromVoice) {
   setComposerEnabled(false);
   idleIndicator.classList.remove("hidden");
   _echoSkip = false;
+  if (window.audioEngine) window.audioEngine.onEchoSpeaking();
 
   state.echoQueue = state.echoQueue.then(async () => {
     await echoSleep(100);
@@ -3719,4 +3724,50 @@ function buildSessionSummary() {
     arc: state.memory.storyArc || "",
     tone: state.memory.dominantTone || "",
   };
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDIO CONTROLS — wire up mute toggle and volume slider
+// Audio engine (audio.js) starts on first chat submission.
+// ─────────────────────────────────────────────────────────────
+
+function initAudioControls() {
+  const muteBtn = document.querySelector("#audioMute");
+  const volSlider = document.querySelector("#audioVolume");
+  const ae = window.audioEngine;
+
+  if (!ae) return;
+
+  // Show reduced controls on mobile (engine won't start there without opt-in)
+  if (ae.isMobile && muteBtn) {
+    muteBtn.textContent = "◈ Sound (off)";
+    muteBtn.title = "Tap to enable ambient sound";
+    muteBtn.addEventListener("click", () => {
+      ae.start();
+      ae.update(state);
+      muteBtn.textContent = "◈ Sound";
+      muteBtn.classList.remove("audio-off");
+    });
+    return;
+  }
+
+  muteBtn?.addEventListener("click", () => {
+    // Start on first click if not yet started
+    if (!ae.started) ae.start();
+
+    const nowMuted = ae.toggleMute();
+    muteBtn.textContent = nowMuted ? "◈ Muted" : "◈ Sound";
+    muteBtn.classList.toggle("audio-off", nowMuted);
+  });
+
+  volSlider?.addEventListener("input", () => {
+    if (!ae.started) ae.start();
+    ae.setVolume(parseFloat(volSlider.value));
+    // Un-mute when user drags volume
+    if (ae.muted) {
+      ae.toggleMute();
+      const muteB = document.querySelector("#audioMute");
+      if (muteB) { muteB.textContent = "◈ Sound"; muteB.classList.remove("audio-off"); }
+    }
+  });
 }

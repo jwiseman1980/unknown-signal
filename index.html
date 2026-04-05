@@ -19,9 +19,25 @@
       <section class="terminal-window">
         <div class="terminal-topbar">
           <p class="eyebrow topbar-label">Unknown Signal</p>
-          <button id="identityToggle" class="ghost-button topbar-button" type="button">
-            Identity
-          </button>
+          <div class="topbar-right">
+            <button id="audioMute" class="ghost-button topbar-button topbar-button--audio" type="button" title="Toggle sound">
+              ◈ Sound
+            </button>
+            <input
+              id="audioVolume"
+              class="audio-volume"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.35"
+              title="Volume"
+              aria-label="Volume"
+            />
+            <button id="identityToggle" class="ghost-button topbar-button" type="button">
+              Identity
+            </button>
+          </div>
         </div>
 
         <section id="identityPanel" class="identity-panel hidden">
@@ -124,9 +140,14 @@
       <aside id="devPanel" class="dev-panel hidden">
         <div class="dev-head">
           <p class="eyebrow">Dev Mode</p>
-          <button id="shareInvite" class="ghost-button" type="button">
-            Share Signal
-          </button>
+          <div class="dev-head-actions">
+            <button id="creatorToggle" class="ghost-button" type="button">
+              Creator
+            </button>
+            <button id="shareInvite" class="ghost-button" type="button">
+              Share Signal
+            </button>
+          </div>
         </div>
 
         <div class="invite-editor">
@@ -241,8 +262,23 @@
           in your browser if you choose it.
         </p>
       </aside>
+      <!-- Creator / Authoring Panel — shown via ?dev=1 toggle -->
+      <aside id="creatorPanel" class="creator-panel hidden">
+        <div class="creator-header">
+          <p class="eyebrow">Creator — Theme Designer</p>
+          <button id="creatorReset" class="ghost-button" type="button">Reset Defaults</button>
+        </div>
+        <p class="creator-intro">
+          Design a new themed game. Edit world, factions, simulations, NPCs, and world-state
+          events. Export as JSON to deploy a new theme.
+        </p>
+        <nav class="creator-tabs" aria-label="Creator sections"></nav>
+        <div class="creator-content"></div>
+      </aside>
     </main>
 
+    <script src="./audio.js"></script>
+    <script src="./creator.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
