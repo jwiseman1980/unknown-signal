@@ -10,7 +10,8 @@
     "api/group.js": { "maxDuration": 10 },
     "api/shadow.js": { "maxDuration": 15 },
     "api/world-state.js": { "maxDuration": 15 },
-    "api/idle.js": { "maxDuration": 60 }
+    "api/idle.js": { "maxDuration": 60 },
+    "api/notify.js": { "maxDuration": 10 }
   },
   "crons": [
     {

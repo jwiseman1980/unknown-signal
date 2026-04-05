@@ -259,6 +259,7 @@ h2 {
 }
 
 input[type="text"],
+input[type="email"],
 select {
   width: 100%;
   min-width: 0;
@@ -270,11 +271,13 @@ select {
   font-size: 16px;
 }
 
-input[type="text"]::placeholder {
+input[type="text"]::placeholder,
+input[type="email"]::placeholder {
   color: var(--muted);
 }
 
 input[type="text"]:focus-visible,
+input[type="email"]:focus-visible,
 select:focus-visible {
   outline: none;
 }
@@ -423,7 +426,35 @@ select:focus-visible {
   animation: glitch-flash 0.12s steps(1) forwards;
 }
 
+/* ─────────────────────────────────────────────
+   MOBILE — phones and small screens
+   ───────────────────────────────────────────── */
 @media (max-width: 720px) {
+  /* Kill heavy GPU effects — CRT scanlines and vignette are too expensive on mobile */
+  body::before,
+  body::after {
+    display: none;
+  }
+
+  /* Disable the body flicker animation on mobile — not worth the battery */
+  html,
+  body {
+    animation: none;
+  }
+
+  /* Reduce phosphor bloom on echo messages — simpler shadow on mobile */
+  .message--echo {
+    text-shadow: 0 0 8px rgba(143, 255, 186, 0.3);
+  }
+
+  /* Remove backdrop blur — very expensive on mobile GPU */
+  .terminal-window,
+  .dev-panel,
+  .identity-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .terminal-shell {
     position: fixed;
     inset: 0;
@@ -437,22 +468,47 @@ select:focus-visible {
     max-width: none;
     height: 100dvh;
     max-height: 100dvh;
-    padding: 16px;
+    padding: 14px 14px 0;
     border-left: none;
     border-right: none;
   }
 
   .conversation {
     min-height: 0;
+    /* Smooth momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+    /* Slightly larger text for readability on small screens */
+    font-size: 0.97rem;
   }
 
   .composer {
     position: sticky;
     bottom: 0;
-    padding: 12px 0 max(12px, env(safe-area-inset-bottom));
-    background: linear-gradient(180deg, rgba(6, 7, 10, 0), rgba(6, 7, 10, 0.92) 26%, rgba(6, 7, 10, 0.98) 100%);
+    padding: 10px 0 max(14px, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(6, 7, 10, 0), rgba(6, 7, 10, 0.94) 28%, rgba(6, 7, 10, 0.99) 100%);
   }
 
+  /* Ensure input doesn't cause iOS zoom — must be 16px+ */
+  input[type="text"],
+  input[type="email"],
+  select {
+    font-size: 16px;
+  }
+
+  /* Larger touch targets for all interactive elements */
+  .ghost-button,
+  .primary-button {
+    width: 100%;
+    min-height: 44px;
+    padding: 12px 14px;
+  }
+
+  .topbar-button {
+    width: auto;
+    min-height: 36px;
+  }
+
+  /* Stack all flex rows vertically on mobile */
   .composer-actions,
   .share-options,
   .invite-editor-row,
@@ -461,13 +517,40 @@ select:focus-visible {
     flex-direction: column;
   }
 
-  .ghost-button,
-  .primary-button {
-    width: 100%;
+  /* Identity panel takes over the screen on mobile */
+  .identity-panel {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    z-index: 100;
+    padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+    height: 100dvh;
+    max-height: none;
   }
 
-  .topbar-button {
-    width: auto;
+  /* Topbar stays tight on mobile */
+  .topbar {
+    gap: 8px;
+  }
+
+  /* Conversation area: tap to skip typewriter — needs a large hit area */
+  .conversation {
+    cursor: pointer;
+  }
+
+  /* Message line height: slightly tighter for small screens */
+  .message {
+    line-height: 1.6;
+  }
+
+  /* Combat HUD: more compact on mobile */
+  .combat-hud {
+    font-size: 0.72rem;
+  }
+
+  .hud-label {
+    width: 40px;
   }
 }
 

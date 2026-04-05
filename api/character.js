@@ -17,14 +17,26 @@ module.exports = async function handler(req, res) {
 
     const profile = await kvGetJson(characterKey(contactToken));
 
-    // Mark idle events as read now that player has seen them
-    if (profile && (profile.idleEvents || []).some((e) => !e.read)) {
-      profile.idleEvents = (profile.idleEvents || []).map((e) => ({ ...e, read: true }));
-      await kvSetJson(characterKey(contactToken), profile);
-    }
-
-    // Refresh the idle index timestamp — player is active
     if (profile) {
+      let dirty = false;
+
+      // Mark idle events as read — player has seen them
+      if ((profile.idleEvents || []).some((e) => !e.read)) {
+        profile.idleEvents = (profile.idleEvents || []).map((e) => ({ ...e, read: true }));
+        dirty = true;
+      }
+
+      // Mark echo quests as seen (not resolved — they stay active until the player handles them)
+      if ((profile.echoQuests || []).some((q) => !q.seen)) {
+        profile.echoQuests = (profile.echoQuests || []).map((q) => ({ ...q, seen: true }));
+        dirty = true;
+      }
+
+      if (dirty) {
+        await kvSetJson(characterKey(contactToken), profile);
+      }
+
+      // Refresh the idle index timestamp — player is active
       const { updateIdleIndex } = require("./idle");
       await updateIdleIndex(contactToken, profile.contactId, profile.isNpc || false);
     }
@@ -34,7 +46,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === "POST") {
-    const { contactToken, contactId, sessionSummary, newDecisions, isNpc } = req.body || {};
+    const { contactToken, contactId, sessionSummary, newDecisions, isNpc, resolvedQuestIds, notifyEmail } = req.body || {};
     if (!contactToken) {
       res.status(400).json({ ok: false, error: "missing_contact_token" });
       return;
@@ -47,12 +59,22 @@ module.exports = async function handler(req, res) {
       sessionSummaries: [],
       cumulativeDecisions: [],
       idleEvents: [],
+      echoQuests: [],
+      notifyEmail: null,
       lastPlayedAt: null,
       updatedAt: null,
     };
 
     if (contactId) existing.contactId = contactId;
     if (typeof isNpc === "boolean") existing.isNpc = isNpc;
+    if (notifyEmail) existing.notifyEmail = notifyEmail;
+
+    // Mark specific echo quests as resolved
+    if (Array.isArray(resolvedQuestIds) && resolvedQuestIds.length) {
+      existing.echoQuests = (existing.echoQuests || []).map((q) =>
+        resolvedQuestIds.includes(q.id) ? { ...q, resolved: true, resolvedAt: new Date().toISOString() } : q
+      );
+    }
 
     if (sessionSummary && sessionSummary.sessionId) {
       const alreadySaved = existing.sessionSummaries.some(

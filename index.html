@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#06070a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Unknown Signal | Invitation</title>
     <meta
       name="description"
@@ -139,6 +143,22 @@
             </button>
           </div>
           <p id="inviteMessage" class="dev-preview">hello</p>
+        </div>
+
+        <div class="invite-editor">
+          <label class="contact-label" for="notifyEmailInput">Echo Alerts (optional)</label>
+          <div class="invite-editor-row">
+            <input
+              id="notifyEmailInput"
+              type="email"
+              maxlength="200"
+              placeholder="email for echo activity alerts"
+            />
+            <button id="saveNotifyEmail" class="ghost-button" type="button">
+              Save
+            </button>
+          </div>
+          <p class="dev-preview" id="notifyEmailStatus">Get an email when your Echo acts while you're away.</p>
         </div>
 
         <div class="invite-editor">

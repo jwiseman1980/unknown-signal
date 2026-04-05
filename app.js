@@ -128,6 +128,7 @@ const state = {
   decisionsAtSessionStart: 0,
   worldState: null,
   pendingIdleEvents: [],
+  pendingEchoQuests: [],
 };
 
 const modeConfig = {
@@ -443,6 +444,50 @@ updateSignal.addEventListener("click", () => {
   addMessage("echo", "signal updated");
 });
 
+// Email notification opt-in
+const notifyEmailInput = document.querySelector("#notifyEmailInput");
+const saveNotifyEmail = document.querySelector("#saveNotifyEmail");
+const notifyEmailStatus = document.querySelector("#notifyEmailStatus");
+
+if (notifyEmailInput && saveNotifyEmail) {
+  // Pre-fill from memory if saved
+  if (state.memory?.notifyEmail) {
+    notifyEmailInput.value = state.memory.notifyEmail;
+    if (notifyEmailStatus) notifyEmailStatus.textContent = "Echo alerts active.";
+  }
+
+  saveNotifyEmail.addEventListener("click", async () => {
+    const email = notifyEmailInput.value.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (notifyEmailStatus) notifyEmailStatus.textContent = "Enter a valid email address.";
+      return;
+    }
+
+    // Save to local memory
+    if (state.memory) {
+      state.memory.notifyEmail = email;
+      persistMemory();
+    }
+
+    // Persist to KV if connected
+    if (state.remote.available) {
+      const token = getOrCreateContactToken();
+      try {
+        await fetch(`${API_BASE}/character`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactToken: token, notifyEmail: email }),
+        });
+      } catch (e) {
+        // Enhancement-only; ignore failures.
+      }
+    }
+
+    if (notifyEmailStatus) notifyEmailStatus.textContent = "Echo alerts active. You'll be notified when your shadow acts.";
+    addMessage("echo", "echo alert registered // you will be notified when your shadow acts");
+  });
+}
+
 contactMode.addEventListener("change", () => {
   state.mode = contactMode.value;
 
@@ -555,6 +600,7 @@ async function callWorldAPI(input, fromVoice) {
     recentMessages,
     characterHistory: state.characterHistory || null,
     pendingIdleEvents: state.pendingIdleEvents.length ? state.pendingIdleEvents : undefined,
+    pendingEchoQuests: state.pendingEchoQuests.length ? state.pendingEchoQuests : undefined,
   };
 
   try {
@@ -749,8 +795,16 @@ async function callWorldAPI(input, fromVoice) {
     }
 
     // Clear pending idle events after first AI response has woven them in
-    if (state.pendingIdleEvents.length) {
+    if (state.pendingIdleEvents && state.pendingIdleEvents.length) {
       state.pendingIdleEvents = [];
+    }
+
+    // Handle Echo Quest resolutions flagged by the AI
+    if (result.narrativeUpdates?.resolvedEchoQuests?.length && state.pendingEchoQuests?.length) {
+      const resolvedIds = result.narrativeUpdates.resolvedEchoQuests;
+      state.pendingEchoQuests = state.pendingEchoQuests.filter((q) => !resolvedIds.includes(q.id));
+      // Persist resolved status to KV so the quest doesn't re-appear next session
+      persistResolvedEchoQuests(resolvedIds);
     }
 
     // Queue the reply lines
@@ -3469,12 +3523,18 @@ async function initializeRemoteContact() {
         const charData = await charResp.json();
         if (charData.ok && charData.profile) {
           state.characterHistory = charData.profile;
-          // Surface unread Echo agency events — queue them for this session
+
+          // Surface unread legacy idle events (NPC-style world events)
           const unread = (charData.profile.idleEvents || []).filter((e) => !e.read);
           if (unread.length) {
             state.pendingIdleEvents = unread;
-            // Notify the player that their Echo was active
-            notifyEchoAgency(unread);
+          }
+
+          // Surface active (unseen or unresolved) Echo Quests — personal problems from the shadow self
+          const activeQuests = (charData.profile.echoQuests || []).filter((q) => !q.resolved);
+          if (activeQuests.length) {
+            state.pendingEchoQuests = activeQuests;
+            notifyEchoQuests(activeQuests);
           }
         }
       }
@@ -3487,32 +3547,48 @@ async function initializeRemoteContact() {
 }
 
 /**
- * When the player returns to find their Echo was active, surface a brief
- * notice before their session begins. Not a full recap — just enough to
- * signal that something happened and the AI will have context.
+ * When the player returns to find active Echo Quests, surface a brief notice
+ * before their session begins. Terse and ominous — just enough to signal that
+ * something happened. The AI will surface the details in narrative.
  */
-function notifyEchoAgency(events) {
-  const count = events.length;
-  const critical = events.filter((e) => e.severity === "critical" || e.severity === "heavy" || e.severity === "catastrophic");
-  const allyEvents = events.filter((e) => e.allyNeeded);
+function notifyEchoQuests(quests) {
+  const unseenQuests = quests.filter((q) => !q.seen);
+  if (!unseenQuests.length) return; // Only show notice for new (unseen) quests
+
+  const crisis = unseenQuests.filter((q) => q.severity === "catastrophic" || q.severity === "critical");
+  const serious = unseenQuests.filter((q) => q.severity === "heavy");
+  const needsAlly = unseenQuests.filter((q) => q.allyNeeded);
 
   window.setTimeout(() => {
-    addMessage("echo", count === 1
-      ? "// ECHO ACTIVITY LOGGED DURING ABSENCE"
-      : `// ECHO ACTIVITY LOGGED DURING ABSENCE — ${count} INCIDENTS`
+    addMessage("echo", unseenQuests.length === 1
+      ? "// ECHO ACTIVITY DETECTED DURING YOUR ABSENCE"
+      : `// ECHO ACTIVITY DETECTED — ${unseenQuests.length} INCIDENTS LOGGED`
     );
+
     window.setTimeout(() => {
-      addMessage("echo", "Your Echo did not wait for you. It made decisions.");
-    }, 600);
-    if (critical.length) {
+      addMessage("echo", "Your shadow did not wait for you.");
+    }, 700);
+
+    let delay = 1500;
+    if (crisis.length) {
       window.setTimeout(() => {
-        addMessage("echo", `${critical.length} incident${critical.length > 1 ? "s" : ""} classified heavy or critical. The damage may already be spreading.`);
-      }, 1400);
+        addMessage("echo", crisis.length === 1
+          ? "One of the incidents is critical. The damage may already be irreversible."
+          : `${crisis.length} incidents classified critical. The damage is already spreading.`
+        );
+      }, delay);
+      delay += 900;
+    } else if (serious.length) {
+      window.setTimeout(() => {
+        addMessage("echo", "What it left behind is serious. You have work to do.");
+      }, delay);
+      delay += 900;
     }
-    if (allyEvents.length) {
+
+    if (needsAlly.length) {
       window.setTimeout(() => {
-        addMessage("echo", "Some of what it left behind is too large to face alone. You may need to find someone.");
-      }, critical.length ? 2200 : 1400);
+        addMessage("echo", "Some of what it started is too big to handle alone. You may need to find someone.");
+      }, delay);
     }
   }, 900);
 }
@@ -3563,6 +3639,21 @@ async function syncSessionRemote() {
     });
   } catch (error) {
     // Local-first prototype: ignore remote sync failures.
+  }
+}
+
+async function persistResolvedEchoQuests(resolvedIds) {
+  if (!state.remote.available || !resolvedIds?.length) return;
+  const token = getOrCreateContactToken();
+  try {
+    await fetch(`${API_BASE}/character`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactToken: token, resolvedQuestIds: resolvedIds }),
+      keepalive: true,
+    });
+  } catch (e) {
+    // Enhancement-only; ignore failures.
   }
 }
 

@@ -30,6 +30,7 @@ function buildSystemPrompt(gameState, theme) {
     sceneNpcs,
     sharedWorldState,
     pendingIdleEvents,
+    pendingEchoQuests,
   } = gameState;
 
   const cases = memory?.cases || [];
@@ -50,7 +51,10 @@ function buildSystemPrompt(gameState, theme) {
     // 3. Cross-session character history — engine-managed, theme-neutral
     `## CHARACTER HISTORY\n${buildCharacterHistorySection(characterHistory, selfLabel, sessions)}`,
 
-    // 4. Idle events — what happened while the player was absent
+    // 4. Echo Quests — active problems caused by the player's shadow self
+    buildEchoQuestsSection(pendingEchoQuests),
+
+    // 4b. Legacy idle events (NPC-style world events, if any)
     buildIdleEventsSection(pendingIdleEvents),
 
     // 5. Narrative state — engine-managed, theme-neutral
@@ -90,32 +94,83 @@ function buildGamePhaseSection(gameState, theme) {
  * The Echo is the player's behavioral shadow, not a passive observer. It acts.
  * Its actions become the player's quests and debts when they return.
  */
+/**
+ * Echo Quests section — active problems caused by the player's behavioral shadow.
+ * These are NOT narrative flavor. They are ACTIVE QUESTS with real consequences.
+ * Sorted by severity so the most urgent problem surfaces first.
+ */
+function buildEchoQuestsSection(pendingEchoQuests) {
+  if (!pendingEchoQuests || !pendingEchoQuests.length) return null;
+
+  const active = pendingEchoQuests.filter((q) => !q.resolved);
+  if (!active.length) return null;
+
+  const severityOrder = { catastrophic: 0, critical: 1, heavy: 2, medium: 3, light: 4 };
+  const sorted = [...active].sort(
+    (a, b) => (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5)
+  );
+
+  const lines = ["## ECHO QUESTS — YOUR SHADOW'S DEBTS"];
+  lines.push(
+    "While this player was offline, their Echo — the distorted behavioral shadow built from their personality — kept acting. " +
+    "No filter. No second-guessing. All impulse. These are the consequences. " +
+    "This is not background lore. These are ACTIVE PROBLEMS that define this session. " +
+    "The world already reacted. NPCs already know. The player walks back in to find the damage done."
+  );
+  lines.push("");
+
+  sorted.forEach((q, i) => {
+    const urgency = q.severity === "catastrophic" ? "CRISIS" :
+                    q.severity === "critical" ? "URGENT" :
+                    q.severity === "heavy" ? "SERIOUS" : "ACTIVE";
+    lines.push(`### Quest ${i + 1} [${urgency}] type=${q.type || "unknown"} id=${q.id || "?"}`);
+    if (q.echoAction) lines.push(`What your Echo did: ${q.echoAction}`);
+    if (q.echoRationale) lines.push(`Why: ${q.echoRationale}`);
+    if (q.consequence) lines.push(`What you walked into: ${q.consequence}`);
+    if (q.hook) lines.push(`Right now: ${q.hook}`);
+    if (q.resolution) lines.push(`To fix this: ${q.resolution}`);
+    if (q.allyNeeded) {
+      lines.push(`NEEDS ALLIES: ${q.allyReason || "Too big to handle alone — another player's involvement is required."}`);
+    }
+    lines.push("");
+  });
+
+  lines.push(
+    "ECHO QUEST RULES:",
+    "- These are the session's primary narrative spine. Do not let the player ignore them.",
+    "- NPCs know what the Echo did and treat the player accordingly — they don't distinguish Echo from player.",
+    "- The consequences are ALREADY IN MOTION. Not threats. Realities.",
+    "- When a quest is resolved (the player faces and handles the consequence), include its quest id in narrativeUpdates.resolvedEchoQuests as a string array.",
+    "- For NEEDS ALLIES quests: make solo resolution visibly fail or create worse problems. Push the player to reach out to other survivors.",
+    "- Tone should be gritty and personal. Not 'the faction threatens the district.' More like 'you owe Black Clinic and their collector is sitting at your safehouse.'"
+  );
+
+  return lines.join("\n");
+}
+
+/**
+ * Legacy idle events section — used for NPC world events and backward-compat player events.
+ */
 function buildIdleEventsSection(pendingIdleEvents) {
   if (!pendingIdleEvents || !pendingIdleEvents.length) return null;
 
-  const lines = ["## YOUR ECHO ACTED WITHOUT YOU"];
-  lines.push("While this player was gone, their Echo — the behavioral fingerprint The Echo has built of them — continued to exist in the world and made decisions. Those decisions have consequences the player now owns.");
-  lines.push("Do NOT present this as a summary. Weave it into the session. The world has changed. NPCs know what the Echo did. The player inherits this mess.");
+  const lines = ["## WORLD EVENTS (WHILE ABSENT)"];
+  lines.push("These events occurred while the player was offline. Weave them in naturally.");
   lines.push("");
 
-  pendingIdleEvents.forEach((e, i) => {
+  pendingIdleEvents.forEach((e) => {
     const sev = (e.severity || "").toUpperCase();
-    lines.push(`[ECHO ACTION — ${sev}]`);
-    if (e.echoAction) lines.push(`What your Echo did: ${e.echoAction}`);
-    if (e.echoRationale) lines.push(`Why: ${e.echoRationale}`);
-    if (e.consequence) lines.push(`Consequence: ${e.consequence}`);
-    if (e.hook) lines.push(`Right now: ${e.hook}`);
-    if (e.resolution) lines.push(`Resolution path: ${e.resolution}`);
-    if (e.allyNeeded && e.allyReason) lines.push(`Needs help: ${e.allyReason}`);
-    if (i < pendingIdleEvents.length - 1) lines.push("");
+    // Handle both legacy summary format and rich echo format
+    if (e.echoAction) {
+      lines.push(`[${sev}] ${e.echoAction}`);
+      if (e.consequence) lines.push(`  Consequence: ${e.consequence}`);
+      if (e.hook) lines.push(`  Now: ${e.hook}`);
+    } else {
+      lines.push(`[${sev}] ${e.summary || ""}`);
+      if (e.hook) lines.push(`  Waiting: ${e.hook}`);
+      if (e.consequence) lines.push(`  Consequence: ${e.consequence}`);
+    }
   });
-
-  lines.push("");
-  lines.push("ECHO AGENCY RULES:");
-  lines.push("- The player did NOT choose what their Echo did. They are responsible for the fallout, not the decision.");
-  lines.push("- NPCs should treat the player as if they did these things — they don't know the difference between the player and the Echo.");
-  lines.push("- The consequence is ALREADY IN MOTION when the player returns. Not a threat — a reality.");
-  lines.push("- If allyNeeded is true, hint that resolving this alone would be extremely difficult or impossible.");
 
   return lines.join("\n");
 }
@@ -316,8 +371,9 @@ function buildResponseSchemaSection(theme, contactId) {
     theme.responseSchemaFields,
     "- **worldTally**: If the player's action represents a meaningful collective decision (completing a simulation, a major moral choice, significant faction interaction), set to the tally key string from the theme's worldState.thresholds. null otherwise. Example: \"simulation_triage_saved_few\". Only set once per meaningful action.",
     "- **narrativeUpdates**: Story evolution object, or null. Schema:",
-    "  { \"storyArc\": \"updated one-sentence arc for this player, or null to keep current\", \"addThreads\": [{\"id\":\"snake_case_id\",\"summary\":\"one-sentence unresolved tension\"}], \"resolveThreads\": [\"id_to_remove\"], \"addDecision\": {\"summary\":\"what the player chose and what it reveals about them\"}, \"dominantTone\": \"one-word tone shift or null\" }",
+    "  { \"storyArc\": \"updated one-sentence arc for this player, or null to keep current\", \"addThreads\": [{\"id\":\"snake_case_id\",\"summary\":\"one-sentence unresolved tension\"}], \"resolveThreads\": [\"id_to_remove\"], \"addDecision\": {\"summary\":\"what the player chose and what it reveals about them\"}, \"dominantTone\": \"one-word tone shift or null\", \"resolvedEchoQuests\": [\"quest_id_1\"] }",
     "  Guidelines: Update storyArc when the player's situation meaningfully shifts. Add a thread whenever a new tension surfaces. Resolve threads when they conclude or collapse. Add a decision for any meaningful player choice. Keep total active threads under 8.",
+    "  resolvedEchoQuests: Array of echo quest IDs that were resolved this response. Only set when the player faced and handled an Echo Quest's consequences — not just acknowledged it. Use the quest id from the ECHO QUESTS section.",
   ].filter(Boolean).join("\n");
 }
 

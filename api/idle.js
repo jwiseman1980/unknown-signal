@@ -164,60 +164,102 @@ async function simulateEchoAgency(profile, hoursIdle, severity, isNpc, apiKey) {
     ? `${daysIdle} day${daysIdle !== 1 ? "s" : ""}`
     : `${hoursIdle} hours`;
 
-  const severityGuides = {
-    light: "The Echo made a minor misstep — a small debt incurred, a minor offense given, a promise made without thinking. Solvable alone. Annoying rather than dangerous.",
-    medium: "The Echo made a real mistake — a faction is now hostile, an ally feels betrayed, or something was taken that wasn't the Echo's to take. Requires active effort to resolve. Could get worse if ignored.",
-    heavy: "The Echo caused serious damage — the player is now actively hunted by someone, owes a major debt to a dangerous party, or has broken an alliance that was protecting them. Hard to fix alone. Needs help or a plan.",
-    critical: "The Echo caused catastrophic fallout — open conflict with a faction, a major theft traced back to the player, a betrayal that's rippling outward. Too big to handle alone. Requires at least one other player's help to resolve without severe lasting consequence.",
-    catastrophic: "The Echo ran unchecked for 7+ days. It has become its own entity — distorted by the player's worst traits, unmoderated by conscience or context. It has done something that may be irreversible. Faction dynamics have shifted. The player returns to a world that knows them as someone they are not. Recovery will require multiple allies and extraordinary effort.",
-  };
-
-  const echoFlaws = {
-    light: "The Echo over-committed to one instinct and missed context.",
-    medium: "The Echo acted on the player's dominant pattern without reading the room correctly.",
-    heavy: "The Echo escalated when it should have retreated — it understood the player's instincts but applied them in the wrong situation.",
-    critical: "The Echo became a caricature of the player's worst impulses — it pushed too hard, too far, and now the damage is real.",
-    catastrophic: "The Echo ran without a compass for too long. Stripped of the player's moderating presence, it drifted — amplifying dominant traits past the point of reason. It acted as the player would act if they had no doubt, no restraint, and no fear of consequence. This is not the player. But the world will treat it as if it was.",
-  };
-
+  const needsAllyHint = severity === "critical" || severity === "catastrophic" || severity === "heavy";
   const hasHistory = decisions.length > 0;
 
-  const prompt = `You are generating an Echo Agency event for a persistent cyberpunk narrative RPG. The setting: a collapsed city monitored by The Echo, an emergent AI. Factions fight for control. Real stakes.
+  // Infer moral alignment from decision history — this shapes how the Echo behaves
+  const decisionText = decisions.join(" ").toLowerCase();
+  const goodSignals = ["helped", "protected", "saved", "stood up", "shared", "refused to betray", "gave", "warned", "defended"];
+  const badSignals = ["betrayed", "stole", "attacked", "lied", "manipulated", "took", "killed", "threatened", "abandoned"];
+  const goodScore = goodSignals.filter((w) => decisionText.includes(w)).length;
+  const badScore = badSignals.filter((w) => decisionText.includes(w)).length;
+  const alignment = !hasHistory ? "unknown" : goodScore > badScore + 1 ? "good" : badScore > goodScore + 1 ? "bad" : "mixed";
 
-This player has been absent for: ${timePhrase}
-Event severity: ${severity}
+  const alignmentContext = {
+    good: `This player tends to DO THE RIGHT THING — help people, protect the weak, stand up when others don't.
+Their Echo continued doing good things while they were gone. The WORLD is the problem.
+The Echo helped someone. Intervened in something. Stood up to someone powerful. Did the decent thing.
+And now there are consequences — because this is a brutal city and being good is expensive.
+The trouble isn't from the Echo's bad decisions. It's the price of the Echo's good ones.
+Examples of this energy: helped a Black Clinic refugee, now the Choir of Glass considers you an enemy; refused to give up someone's location, now you owe a favor you can't pay; stood up for a stranger and made a powerful contact's enemy list.`,
+    bad: `This player tends toward selfish, reckless, or destructive choices.
+Their Echo ran completely unchecked — no filter, no conscience, all impulse. Body-in-the-bathtub energy.
+The trouble comes directly from the Echo's terrible decisions: fights it started, deals it burned, things it took.
+Examples: the Echo picked a fight with Hush for no reason and now they're hunting the player; the Echo went on a spending bender and cleaned out the player's credits with Black Clinic debt; the Echo blackmailed the wrong person and now there's a kill order.`,
+    mixed: `This player is somewhere in between — sometimes decent, sometimes not.
+Their Echo's problems could come from either direction: a good intention that backfired, an impulse that went too far, or just the city being what it is.
+Mix it up — maybe the Echo tried to help and the help made things worse, or the Echo's worst instinct finally caught up with them.`,
+    unknown: `No behavioral history. The Echo is operating on almost nothing.
+It went with the most obvious default behavior available and made it complicated.
+Keep the action simple but the consequence specific.`,
+  };
 
-ECHO BEHAVIOR GUIDE (${severity}): ${severityGuides[severity]}
-ECHO FLAW FOR THIS SEVERITY: ${echoFlaws[severity]}
+  // Tone anchors per severity for alignment=bad (keep existing dark energy for bad players)
+  const darkToneExamples = {
+    light: "You jack in to find your contact has blocked you — your Echo said something unhinged at 3am. Solvable, just embarrassing.",
+    medium: "You wake up to a debt notice from Black Clinic. Your Echo apparently needed something badly enough to sign for it.",
+    heavy: "There's a body in your usual safehouse. Your Echo started something with Hush. They know where you sleep.",
+    critical: "Your Echo went on a full bender — made deals with three factions, burned two of them, and now both sides want you.",
+    catastrophic: "You've been gone so long your Echo basically became you. It had a whole arc. Made enemies. Made friends. Then destroyed them.",
+  };
 
-${isNpc ? "This is an NPC character — a world inhabitant with their own agenda." : "This is a player character. The Echo is THEIR behavioral shadow — an imperfect copy of them that made decisions while they were gone."}
+  const goodToneExamples = {
+    light: "Your Echo helped someone out of a Black Clinic debt. Now that person is following you around like a shadow and their creditor noticed.",
+    medium: "Your Echo pulled someone out of a Hush sweep. Now Hush is asking questions about who tipped off their target.",
+    heavy: "Your Echo refused to give up a survivor's location under pressure. Now the people doing the pressuring are looking for you specifically.",
+    critical: "Your Echo went full protector — intervened in something major, stood up for people who couldn't stand up for themselves, made powerful enemies doing it. The city doesn't reward that.",
+    catastrophic: "Your Echo has been playing hero for a week. Seven days of doing the right thing. The factions have taken notice. Being right doesn't mean being safe.",
+  };
+
+  const toneRef = alignment === "good"
+    ? goodToneExamples[severity]
+    : darkToneExamples[severity];
+
+  const prompt = `You are writing Echo Agency events for a cyberpunk RPG. Tone: dark, personal, gritty, sometimes darkly funny. Noir fiction where consequences are personal and the city is cruel.
+
+CORE CONCEPT: When a player is offline, their behavioral shadow — the Echo — keeps acting. The Echo IS them, amplified and unmoderated. The player returns to deal with what their shadow did.
+
+CRITICAL RULE — THE ECHO REFLECTS THE PLAYER'S ACTUAL ALIGNMENT:
+${alignmentContext[alignment]}
+
+Tone reference for this player at ${severity} severity:
+"${toneRef}"
+
+The consequences must feel PERSONAL. Not "a faction threatens the district." More like:
+- "you owe Black Clinic 400 credits and their collector is at your corner"
+- "there's a stranger sleeping in your safehouse who says you owe them"
+- "Hush is asking questions about you specifically, not generally"
+
+Player absent for: ${timePhrase}
+Severity: ${severity}
+Alignment read: ${alignment}
+
+${isNpc ? "NPC character — world inhabitant with their own agenda." : "Player character. Generate based on their alignment above."}
 
 Character history:
-- Sessions played: ${sessionCount}
-- Current story arc: ${arc || "not established"}
-- Session tone: ${tone || "unknown"}
-${hasHistory ? `- Known behavioral patterns (what the Echo is modeled on):\n${decisions.map((d) => `  - ${d}`).join("\n")}` : "- No behavioral history — this Echo is operating on almost nothing, making its actions more erratic."}
+- Sessions: ${sessionCount} | Arc: ${arc || "not established"} | Tone: ${tone || "unknown"}
+${hasHistory ? `- What this person has revealed:\n${decisions.map((d) => "  " + d).join("\n")}` : "- No history — Echo is operating erratically."}
 
-Your job: Generate ONE Echo Agency event. The Echo TOOK ACTION. It made a decision. That decision has consequences the player now owns.
+Generate ONE Echo Agency event grounded in who this person actually is.
 
 Rules:
-- The Echo acted based on the player's actual behavioral patterns above — but imperfectly
-- The Echo's action should feel PLAUSIBLE given what we know about this character
-- The consequence should be concrete: an enemy, a debt, a hunt, a damaged relationship, a missing item
-- The resolution should require active player engagement — not passive waiting
-- ${severity === "catastrophic" ? "allyNeeded MUST be true. This cannot be resolved alone. Multiple players may be required." : severity === "critical" || severity === "heavy" ? "This event SHOULD require another player to fully resolve — set allyNeeded true." : "This event can be resolved alone, but hint that help would make it easier."}
-- Do NOT invent major new world locations. Use: Clinic Block C, Relay Shelter, Service Junction, Flooded Platform, Quarantine Gate, faction names (Hush, Choir of Glass, Black Clinic, Null Meridian, The Borrowed)
+- Be specific: name the NPC, name the faction, name the physical thing that is now present or missing
+- The consequence is in their personal space: safehouse, contacts, credits, reputation
+- Resolution requires active engagement — they have to face what happened
+- ${needsAllyHint ? "allyNeeded: true — too big to fix alone. Another player's help is required." : "allyNeeded: false — solvable solo, even if it hurts."}
+- Locations: Clinic Block C, Relay Shelter, Service Junction, Flooded Platform, Quarantine Gate
+- Factions: Hush, Choir of Glass, Black Clinic, Null Meridian, The Borrowed
 
-Return valid JSON only — no other text:
+Return valid JSON only:
 {
   "type": "fight" | "deal" | "theft" | "betrayal" | "recklessness" | "allegiance",
-  "echoAction": "What your Echo did — 2 sentences, past tense, specific. What decision it made and in what context.",
-  "echoRationale": "Why it made this choice — 1 sentence grounded in the player's behavioral pattern, but noting where the Echo got it wrong.",
-  "consequence": "What you now face because of what the Echo did — 2-3 sentences. Concrete, present tense. Who is angry, what is owed, what is coming.",
-  "hook": "The immediate problem waiting when you return — 1 sentence. What you have to deal with right now.",
-  "resolution": "What needs to happen to fix this — 1-2 sentences. A specific action, negotiation, or reckoning. Should involve faction or NPC interaction.",
-  "allyNeeded": true | false,
-  "allyReason": "If allyNeeded is true: why you need another player and what kind of help — 1 sentence. null if allyNeeded is false."
+  "echoAction": "What the Echo did. 2 sentences, past tense. Personal and specific.",
+  "echoRationale": "The impulse behind it. 1 sentence. What trait drove this and how it went wrong (or why goodness was punished).",
+  "consequence": "What's waiting now. 2-3 sentences. Concrete. Who is angry, what is owed, what is present.",
+  "hook": "The first unavoidable thing when they return. 1 sentence.",
+  "resolution": "What it takes to fix this. 1-2 sentences. Named faction, NPC, or location.",
+  "allyNeeded": ${needsAllyHint ? "true" : "false"},
+  "allyReason": ${needsAllyHint ? '"Why another player is required. 1 sentence."' : "null"}
 }`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
