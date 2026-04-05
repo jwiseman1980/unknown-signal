@@ -3469,10 +3469,12 @@ async function initializeRemoteContact() {
         const charData = await charResp.json();
         if (charData.ok && charData.profile) {
           state.characterHistory = charData.profile;
-          // Surface unread idle events so the AI can weave them in this session
+          // Surface unread Echo agency events — queue them for this session
           const unread = (charData.profile.idleEvents || []).filter((e) => !e.read);
           if (unread.length) {
             state.pendingIdleEvents = unread;
+            // Notify the player that their Echo was active
+            notifyEchoAgency(unread);
           }
         }
       }
@@ -3482,6 +3484,37 @@ async function initializeRemoteContact() {
   } catch (error) {
     state.remote.checked = true;
   }
+}
+
+/**
+ * When the player returns to find their Echo was active, surface a brief
+ * notice before their session begins. Not a full recap — just enough to
+ * signal that something happened and the AI will have context.
+ */
+function notifyEchoAgency(events) {
+  const count = events.length;
+  const critical = events.filter((e) => e.severity === "critical" || e.severity === "heavy" || e.severity === "catastrophic");
+  const allyEvents = events.filter((e) => e.allyNeeded);
+
+  window.setTimeout(() => {
+    addMessage("echo", count === 1
+      ? "// ECHO ACTIVITY LOGGED DURING ABSENCE"
+      : `// ECHO ACTIVITY LOGGED DURING ABSENCE — ${count} INCIDENTS`
+    );
+    window.setTimeout(() => {
+      addMessage("echo", "Your Echo did not wait for you. It made decisions.");
+    }, 600);
+    if (critical.length) {
+      window.setTimeout(() => {
+        addMessage("echo", `${critical.length} incident${critical.length > 1 ? "s" : ""} classified heavy or critical. The damage may already be spreading.`);
+      }, 1400);
+    }
+    if (allyEvents.length) {
+      window.setTimeout(() => {
+        addMessage("echo", "Some of what it left behind is too large to face alone. You may need to find someone.");
+      }, critical.length ? 2200 : 1400);
+    }
+  }, 900);
 }
 
 async function fetchWorldState() {

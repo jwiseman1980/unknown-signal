@@ -86,20 +86,36 @@ function buildGamePhaseSection(gameState, theme) {
 }
 
 /**
- * Idle events section — events generated while the player was absent.
- * Injected before narrative state so the AI can weave them into the session.
+ * Echo agency section — what the player's Echo did while they were offline.
+ * The Echo is the player's behavioral shadow, not a passive observer. It acts.
+ * Its actions become the player's quests and debts when they return.
  */
 function buildIdleEventsSection(pendingIdleEvents) {
   if (!pendingIdleEvents || !pendingIdleEvents.length) return null;
 
-  const lines = ["## WHILE YOU WERE AWAY"];
-  lines.push("These events occurred while the player was absent. Weave them into the session naturally — do not dump them as a list. Reference specific details when the world or NPCs respond to the player's return.");
+  const lines = ["## YOUR ECHO ACTED WITHOUT YOU"];
+  lines.push("While this player was gone, their Echo — the behavioral fingerprint The Echo has built of them — continued to exist in the world and made decisions. Those decisions have consequences the player now owns.");
+  lines.push("Do NOT present this as a summary. Weave it into the session. The world has changed. NPCs know what the Echo did. The player inherits this mess.");
   lines.push("");
-  pendingIdleEvents.forEach((e) => {
-    lines.push(`[${(e.severity || "").toUpperCase()}] ${e.summary}`);
-    if (e.hook) lines.push(`  Waiting: ${e.hook}`);
-    if (e.consequence) lines.push(`  Consequence: ${e.consequence}`);
+
+  pendingIdleEvents.forEach((e, i) => {
+    const sev = (e.severity || "").toUpperCase();
+    lines.push(`[ECHO ACTION — ${sev}]`);
+    if (e.echoAction) lines.push(`What your Echo did: ${e.echoAction}`);
+    if (e.echoRationale) lines.push(`Why: ${e.echoRationale}`);
+    if (e.consequence) lines.push(`Consequence: ${e.consequence}`);
+    if (e.hook) lines.push(`Right now: ${e.hook}`);
+    if (e.resolution) lines.push(`Resolution path: ${e.resolution}`);
+    if (e.allyNeeded && e.allyReason) lines.push(`Needs help: ${e.allyReason}`);
+    if (i < pendingIdleEvents.length - 1) lines.push("");
   });
+
+  lines.push("");
+  lines.push("ECHO AGENCY RULES:");
+  lines.push("- The player did NOT choose what their Echo did. They are responsible for the fallout, not the decision.");
+  lines.push("- NPCs should treat the player as if they did these things — they don't know the difference between the player and the Echo.");
+  lines.push("- The consequence is ALREADY IN MOTION when the player returns. Not a threat — a reality.");
+  lines.push("- If allyNeeded is true, hint that resolving this alone would be extremely difficult or impossible.");
 
   return lines.join("\n");
 }
