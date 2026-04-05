@@ -1,56 +1,94 @@
 # Deploy
 
-This project is a static site.
-There is no build step right now.
+## Local Development
 
-## Fastest Local Run
+Run a local server with hot reload via the Vercel CLI (handles API routes too):
 
-Run:
+```bash
+npm i -g vercel
+vercel dev
+```
+
+Or for frontend-only (no API routes):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start-local.ps1
+# then open http://127.0.0.1:4173
 ```
 
-Then open:
+For local API routes, copy `.env.example` to `.env.local` and fill in your keys.
 
-```text
-http://127.0.0.1:4173
-```
+---
 
-## Fastest Public Hosting Options
+## Vercel Deployment (full stack)
 
-### Netlify Drop
+This is the primary deployment target. Vercel handles static files + serverless API routes from the `/api` folder automatically.
 
-Best when you want something live quickly without setting up a repo.
+### 1. Import the repo
 
-1. Open the Netlify Drop site.
-2. Drag this entire folder into it.
-3. Use the generated public URL.
+Vercel dashboard → Add New Project → Import `jwiseman1980/unknown-signal`.
 
-`netlify.toml` is included, but the project works even without it because the site is fully static.
+- **Framework preset**: Other
+- **Build command**: *(leave empty)*
+- **Output directory**: `.` (root)
+- **Install command**: *(leave empty)*
 
-### Vercel
+### 2. Set environment variables
 
-Best when you want a cleaner long-term static deployment flow.
+Vercel dashboard → Project → Settings → Environment Variables.
 
-1. Create a new Vercel project from this folder or import it into a repo later.
-2. Keep the output as a static site with no build command.
-3. Deploy.
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | Powers the Claude Sonnet narrative engine. Get at console.anthropic.com |
+| `OPENAI_API_KEY` | No | Powers The Echo's voice (TTS-1). Falls back to browser speech if unset. |
+| `KV_REST_API_URL` | No* | Auto-set by Vercel when you attach a KV store (see step 3) |
+| `KV_REST_API_TOKEN` | No* | Auto-set by Vercel when you attach a KV store (see step 3) |
 
-`vercel.json` is included for a minimal static config.
+*Without KV, the game runs fine but contact numbering, session history, and cross-session character memory are disabled.
 
-## What To Host
+### 3. Attach a KV store (for persistence)
 
-Upload the root folder contents, including:
+Vercel dashboard → Project → Storage → Connect Store → Create New → KV.
 
-- `index.html`
-- `app.js`
-- `style.css`
+Once linked, Vercel automatically injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` into your deployment. Redeploy after linking.
 
-The markdown design docs do not affect runtime, but they can stay in the project folder.
+Verify KV is live by hitting `/api/health` on your deployment — it returns `{ "kvConfigured": true }` when working.
 
-## Important Notes
+### 4. Deploy
 
-- Query-string parameters such as `?dev=1`, `?signal=...`, `?mode=...`, and `?channel=...` are part of the current authoring flow.
-- The default public experience should not use `?dev=1`.
-- The app uses browser local storage for contact memory in the current prototype.
+Push to `main` or trigger manually from the Vercel dashboard. Every push to `main` deploys automatically once the project is imported.
+
+---
+
+## GitHub Pages (frontend only)
+
+The `.github/workflows/deploy-pages.yml` workflow deploys the static frontend to GitHub Pages on every push to `main`.
+
+**Live at:** `https://jwiseman1980.github.io/unknown-signal/`
+
+This deployment has **no API routes** — the Claude narrative engine, voice TTS, and character history are all disabled. The game falls back to its local hardcoded handlers. Useful for frontend testing and sharing the first-contact experience without backend costs.
+
+---
+
+## What each deployment target can do
+
+| Feature | GitHub Pages | Vercel (no KV) | Vercel (with KV) |
+|---|---|---|---|
+| First contact + terminal UI | Yes | Yes | Yes |
+| Hardcoded simulations | Yes | Yes | Yes |
+| Claude AI narrative (Sonnet) | No | Yes* | Yes |
+| Echo voice (OpenAI TTS) | No | Yes* | Yes |
+| Contact numbering | No | No | Yes |
+| Session history | No | No | Yes |
+| Cross-session character memory | No | No | Yes |
+
+*Requires env vars set in Vercel.
+
+---
+
+## Environment variable notes
+
+- Never commit `.env.local` — it is gitignored.
+- `.env.example` documents all variables with placeholder values — commit that instead.
+- The `ANTHROPIC_API_KEY` is only ever read server-side in `api/world.js`. It is never exposed to the browser.
+- Same for `OPENAI_API_KEY` in `api/voice.js`.

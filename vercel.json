@@ -1,6 +1,14 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/world.js": { "maxDuration": 30 },
+    "api/voice.js": { "maxDuration": 20 },
+    "api/character.js": { "maxDuration": 10 },
+    "api/contact.js": { "maxDuration": 10 },
+    "api/session.js": { "maxDuration": 10 },
+    "api/group.js": { "maxDuration": 10 }
+  },
   "headers": [
     {
       "source": "/(.*)",
