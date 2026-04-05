@@ -7,8 +7,17 @@
     "api/character.js": { "maxDuration": 10 },
     "api/contact.js": { "maxDuration": 10 },
     "api/session.js": { "maxDuration": 10 },
-    "api/group.js": { "maxDuration": 10 }
+    "api/group.js": { "maxDuration": 10 },
+    "api/shadow.js": { "maxDuration": 15 },
+    "api/world-state.js": { "maxDuration": 15 },
+    "api/idle.js": { "maxDuration": 60 }
   },
+  "crons": [
+    {
+      "path": "/api/idle",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

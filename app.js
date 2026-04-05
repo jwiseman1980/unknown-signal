@@ -113,6 +113,8 @@ const state = {
   attention: 0,
   characterHistory: null,
   decisionsAtSessionStart: 0,
+  worldState: null,
+  pendingIdleEvents: [],
 };
 
 const modeConfig = {
@@ -279,6 +281,7 @@ function boot() {
   state.decisionsAtSessionStart = (state.memory.keyDecisions || []).length;
   window.addEventListener("pagehide", saveCharacterHistory);
   initializeRemoteContact();
+  fetchWorldState();
   probeAIAvailability();
   queueIntro();
 }
@@ -537,6 +540,7 @@ async function callWorldAPI(input, fromVoice) {
     },
     recentMessages,
     characterHistory: state.characterHistory || null,
+    pendingIdleEvents: state.pendingIdleEvents.length ? state.pendingIdleEvents : undefined,
   };
 
   try {
@@ -723,6 +727,16 @@ async function callWorldAPI(input, fromVoice) {
       if (newDecisionCount > 0 && newDecisionCount % 3 === 0) {
         saveCharacterHistory();
       }
+    }
+
+    // Submit world tally if the AI flagged a meaningful collective decision
+    if (result.worldTally && typeof result.worldTally === "string") {
+      submitTally(result.worldTally);
+    }
+
+    // Clear pending idle events after first AI response has woven them in
+    if (state.pendingIdleEvents.length) {
+      state.pendingIdleEvents = [];
     }
 
     // Queue the reply lines
@@ -3289,6 +3303,11 @@ async function initializeRemoteContact() {
         const charData = await charResp.json();
         if (charData.ok && charData.profile) {
           state.characterHistory = charData.profile;
+          // Surface unread idle events so the AI can weave them in this session
+          const unread = (charData.profile.idleEvents || []).filter((e) => !e.read);
+          if (unread.length) {
+            state.pendingIdleEvents = unread;
+          }
         }
       }
     } catch (e) {
@@ -3296,6 +3315,33 @@ async function initializeRemoteContact() {
     }
   } catch (error) {
     state.remote.checked = true;
+  }
+}
+
+async function fetchWorldState() {
+  try {
+    const response = await fetch(`${API_BASE}/world-state`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.ok && data.worldState) {
+        state.worldState = data.worldState;
+      }
+    }
+  } catch (e) {
+    // World state is enhancement-only; ignore failures.
+  }
+}
+
+async function submitTally(key) {
+  const token = getOrCreateContactToken();
+  try {
+    fetch(`${API_BASE}/world-state`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "tally", key, contactToken: token }),
+    }).catch(() => {});
+  } catch (e) {
+    // Fire-and-forget; ignore failures.
   }
 }
 

@@ -1,4 +1,5 @@
 const { buildSystemPrompt, buildMessages } = require("./_lib/engine");
+const { isKvConfigured, kvGetJson } = require("./_lib/kv");
 const theme = require("../themes/unknown-signal/theme");
 
 module.exports = async function handler(req, res) {
@@ -19,8 +20,35 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const systemPrompt = buildSystemPrompt(gameState, theme);
-  const messages = buildMessages(input, gameState);
+  // Enrich gameState server-side before building the prompt
+  const enriched = { ...gameState };
+
+  if (isKvConfigured()) {
+    // Fetch random shadow profiles for this scene — these become the NPC echoes
+    const { getRandomShadows } = require("./shadow");
+    const scene = gameState.currentScene || null;
+    const shadows = await getRandomShadows(2, scene).catch(() => []);
+    if (shadows.length) enriched.echoShadows = shadows;
+
+    // Fetch NPC profiles for the current scene if theme provides them
+    if (typeof theme.getNpcsForScene === "function" && gameState.currentScene) {
+      const npcTokens = theme.getNpcsForScene(gameState.currentScene);
+      if (npcTokens.length) {
+        const npcProfiles = await Promise.all(
+          npcTokens.map((token) => kvGetJson(`signal:character:${token}`).catch(() => null))
+        );
+        enriched.sceneNpcs = npcProfiles.filter(Boolean);
+      }
+    }
+
+    // Fetch shared world state for canon events and faction standings
+    const { getOrInitWorldState } = require("./world-state");
+    const worldState = await getOrInitWorldState().catch(() => null);
+    if (worldState) enriched.sharedWorldState = worldState;
+  }
+
+  const systemPrompt = buildSystemPrompt(enriched, theme);
+  const messages = buildMessages(input, enriched);
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {

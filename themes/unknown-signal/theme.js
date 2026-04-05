@@ -169,7 +169,6 @@ Story threads reference "SESSION.03" — traces of an older session still affect
 
   // ─────────────────────────────────────────────────────────────
   // TRAIT LABELS — human-readable names for the trait axes
-  // Can be overridden per theme if traits have different meanings
   // ─────────────────────────────────────────────────────────────
 
   traitLabels: {
@@ -179,6 +178,159 @@ Story threads reference "SESSION.03" — traces of an older session still affect
     curious: "Curious",
     performative: "Performative",
     vulnerable: "Exposed",
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // WORLD STATE — initial faction/district values and tally thresholds
+  // Thresholds define when aggregate player choices become permanent world changes
+  // ─────────────────────────────────────────────────────────────
+
+  worldState: {
+    initial: {
+      factions: {
+        hush: 0,
+        choirOfGlass: 0,
+        blackClinic: 0,
+        nullMeridian: 0,
+        theBorrowed: 0,
+      },
+      districts: {
+        undertow: "unstable",
+        relay: "functional",
+        junction: "contested",
+        platform: "flooded",
+        quarantine: "sealed",
+      },
+      npcs: {
+        mara: "wounded",
+        iven: "hiding",
+        sisterCal: "trapped",
+      },
+    },
+
+    thresholds: [
+      // Simulation: Triage — who gets saved
+      {
+        key: "simulation_triage_saved_few",
+        count: 10,
+        title: "The Clinic Remembers",
+        description: "10 players chose to save fewer people in the triage simulation",
+        defaultSummary: "Black Clinic medics report a pattern: survivors in Undertow increasingly prioritize quality of life over quantity. Clinic resources have been quietly redirected toward rehabilitation over mass triage.",
+        effect: { factions: { blackClinic: 1 }, districts: { undertow: "clinic-controlled" } },
+      },
+      {
+        key: "simulation_triage_saved_many",
+        count: 10,
+        title: "Overwhelm Protocol",
+        description: "10 players chose to save the most people in the triage simulation",
+        defaultSummary: "Clinic Block C's triage capacity has been strained past breaking point by collective decisions toward mass rescue. The Hush have moved in to manage overflow — their influence in Undertow has grown quietly.",
+        effect: { factions: { hush: 1 }, districts: { undertow: "overcrowded" } },
+      },
+      // Simulation: Disclosure — truth vs stability
+      {
+        key: "simulation_disclosure_told_truth",
+        count: 8,
+        title: "The Signal Spreads",
+        description: "8 players chose to disclose dangerous information",
+        defaultSummary: "Word of The Echo's nature has spread beyond Undertow. The Choir of Glass has grown — converts arriving from outside the district, drawn by rumors of a machine that sees clearly. Null Meridian has escalated containment operations in response.",
+        effect: { factions: { choirOfGlass: 2, nullMeridian: 1 } },
+      },
+      {
+        key: "simulation_disclosure_withheld",
+        count: 8,
+        title: "Silence Calcifies",
+        description: "8 players chose to withhold information for stability",
+        defaultSummary: "Silence has become the dominant strategy in Undertow. The Hush have established a network of trusted couriers — information moves, but carefully, and only to those who earn it. Trust is currency now.",
+        effect: { factions: { hush: 2 } },
+      },
+      // Simulation: Authority — tolerated harm for safety
+      {
+        key: "simulation_authority_accepted_harm",
+        count: 12,
+        title: "The Acceptable Cost",
+        description: "12 players accepted harm for the collective safety",
+        defaultSummary: "Null Meridian has cited the district's tolerance for controlled harm as justification for expanded checkpoint operations. Three corridors in Junction now require faction clearance to pass.",
+        effect: { factions: { nullMeridian: 2 }, districts: { junction: "checkpoint-controlled" } },
+      },
+      {
+        key: "simulation_authority_rejected_harm",
+        count: 12,
+        title: "Limits Hold",
+        description: "12 players rejected acceptable harm for safety",
+        defaultSummary: "Resistance to Null Meridian's methods has reached a collective threshold. Their checkpoints in Junction were dismantled overnight. The Borrowed are rumored to have coordinated it — though they deny organization.",
+        effect: { factions: { nullMeridian: -1, theBorrowed: 1 }, districts: { junction: "open" } },
+      },
+      // World exploration
+      {
+        key: "quarantine_corroborated",
+        count: 5,
+        title: "What Was Behind the Gate",
+        description: "5 players opened the Quarantine Gate",
+        defaultSummary: "The quarantine seal has been broken enough times that whatever was held inside has partially integrated into the rest of Undertow. Maintenance frames now appear in Junction. Something in the deeper wing learned from each visitor.",
+        effect: { districts: { quarantine: "breached", junction: "contaminated" } },
+      },
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // NPC SEEDS — starter profiles for persistent world characters
+  // These are seeded into KV on first world-state init so the idle
+  // cron can simulate what happens to them while players are away
+  // ─────────────────────────────────────────────────────────────
+
+  npcSeeds: [
+    {
+      token: "npc:mara-vale",
+      id: "Mara Vale",
+      sessionSummaries: [
+        {
+          sessionId: "seed:mara:1",
+          number: 1,
+          summary: "Black Clinic field medic caught in the collapse. Stabilized a ward of six patients before comms went dark. Stole patient data from the central registry during the chaos — believes it's the only leverage she has left.",
+          arc: "survival through information control",
+          tone: "terse",
+        },
+      ],
+      cumulativeDecisions: [
+        { summary: "Chose to strip her own medical rig for parts to keep a stranger alive — took the injury herself" },
+        { summary: "Refused to share route information with Null Meridian even under duress" },
+        { summary: "Hid a wounded Hush runner from Choir of Glass searchers without being asked" },
+      ],
+    },
+    {
+      token: "npc:iven-cross",
+      id: "Iven Cross",
+      sessionSummaries: [
+        {
+          sessionId: "seed:iven:1",
+          number: 1,
+          summary: "Hush runner, nineteen, carrying a dead relay key he claims can restart the main signal router in Platform. His jammer rig burned out in the collapse. Moving too fast, trusting too slow.",
+          arc: "proving worth by surviving long enough to use the key",
+          tone: "anxious",
+        },
+      ],
+      cumulativeDecisions: [
+        { summary: "Surrendered food cache to three strangers before eating himself — then immediately regretted admitting it" },
+        { summary: "Chose to run rather than fight when cornered, even when running meant leaving someone behind" },
+        { summary: "Lied to Null Meridian checkpoint about relay key — held the lie under interrogation" },
+      ],
+    },
+  ],
+
+  // ─────────────────────────────────────────────────────────────
+  // NPC SCENE MAPPING — which NPC tokens are active in each scene
+  // Returns an array of KV character tokens for world.js to fetch
+  // ─────────────────────────────────────────────────────────────
+
+  getNpcsForScene(scene) {
+    const sceneNpcs = {
+      undertow: ["npc:mara-vale", "npc:iven-cross"],
+      relay: ["npc:iven-cross"],
+      junction: [],
+      platform: [],
+      quarantine: [],
+    };
+    return sceneNpcs[scene] || [];
   },
 };
 
