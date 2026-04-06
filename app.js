@@ -681,6 +681,8 @@ async function callWorldAPI(input, fromVoice) {
         state.openingSimulationId = state.activeSimulation.id;
         state.activeSimulation = null;
         refreshTransitionPanel();
+        // Simulation completion is the most character-defining moment — save immediately
+        saveCharacterHistory();
       } else if (state.activeSimulation && result.simulation.stage) {
         state.activeSimulation.stage = result.simulation.stage;
         if (result.simulation.choice) {
@@ -854,6 +856,8 @@ function applySceneTransition(sceneName) {
   document.querySelector("#combatHud").classList.remove("hidden");
   updateCombatHud();
   if (window.audioEngine) window.audioEngine.update(state);
+  // Save on every scene transition — location data matters for character history
+  saveCharacterHistory();
 }
 
 function updateCombatHud() {
@@ -957,7 +961,7 @@ function queueEchoReplies(replies, fromVoice) {
       await addMessage("echo", replies[i]);
       if (state.voiceEnabled) speak(replies[i]);
       // Pause between lines — skip if user clicked
-      if (i < replies.length - 1) await echoSleep(280);
+      if (i < replies.length - 1) await echoSleep(160);
     }
     idleIndicator.classList.add("hidden");
     setComposerEnabled(true);
@@ -988,13 +992,13 @@ function classifyEchoIntensity(text) {
 }
 
 /**
- * Per-character delay. Punctuation creates beat pauses like a real teleprinter.
+ * Per-character delay. Punctuation creates brief beat pauses.
  */
 function getPrintDelay(char, base) {
-  const jitter = Math.random() * 10 - 5;
-  if (char === "." || char === "?" || char === "!") return base * 5.5 + jitter;
-  if (char === "," || char === ";" || char === ":") return base * 2.2 + jitter;
-  if (char === " ") return base * 0.65 + jitter;
+  const jitter = Math.random() * 6 - 3;
+  if (char === "." || char === "?" || char === "!") return base * 3.0 + jitter;
+  if (char === "," || char === ";" || char === ":") return base * 1.5 + jitter;
+  if (char === " ") return base * 0.6 + jitter;
   return base + jitter;
 }
 
@@ -1010,7 +1014,7 @@ function startTypewriter(messageEl, bodyEl, text, intensity) {
   cursorEl.textContent = "▋";
   bodyEl.append(textSpan, cursorEl);
 
-  const base = intensity === "dramatic" ? 52 : 30;
+  const base = intensity === "dramatic" ? 32 : 18;
   const glitchProb = intensity === "dramatic" ? 0.055 : 0.018;
 
   return new Promise((resolve) => {
@@ -3790,6 +3794,14 @@ function buildSessionSummary() {
     quarantine: "Quarantine Gate",
   }[state.currentScene] || null;
 
+  // Decisions made THIS session (new since start)
+  const allDecisions = state.memory.keyDecisions || [];
+  const newDecisionCount = Math.max(0, allDecisions.length - state.decisionsAtSessionStart);
+  const sessionDecisions = allDecisions.slice(0, newDecisionCount).map((d) => d.summary || d);
+
+  // Active plot threads at close of session
+  const activeThreads = (state.memory.storyThreads || []).map((t) => t.summary || t.id);
+
   const parts = [
     sceneName ? `Reached ${sceneName}.` : "Did not enter the city.",
     casesThisSession.length ? `Cases: ${casesThisSession.join(", ")}.` : "",
@@ -3802,6 +3814,11 @@ function buildSessionSummary() {
     summary: parts.join(" ") || "Session completed.",
     arc: state.memory.storyArc || "",
     tone: state.memory.dominantTone || "",
+    // These give the idle system and character history much more to work with
+    decisions: sessionDecisions.slice(0, 6),
+    threads: activeThreads.slice(0, 5),
+    sceneReached: state.currentScene || null,
+    simulationId: state.openingSimulationId || null,
   };
 }
 
