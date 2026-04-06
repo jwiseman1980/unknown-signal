@@ -326,6 +326,7 @@ function buildCombatSection(c, theme) {
     "### Combat Rules",
     "- When a player enters a dangerous area or provokes something, enemies can appear. Describe them arriving.",
     "- Players attack by typing naturally: \"attack it\", \"shoot the drone\", \"hack its systems\", \"throw the medkit at it\", \"hide\", \"run\"",
+    "- ACTION CHAINING: Players may issue multiple actions in one input. Outside combat, resolve them in sequence — each step flows into the next unless something interrupts. Example: \"pick up the medkit, patch the wound, then check the door\" → narrate all three, noting if an interruption (NPC reacts, sound from outside) cuts the chain short. In active combat, chain non-attack actions freely (reload + move + take cover) but each attack action triggers roundtime and an enemy response before the next attack.",
     "- Resolve attacks using an implicit d20 roll modified by skill. Roll formula: d20 + skill_bonus vs enemy defense.",
     "  Skill bonus = skill level (0-10). Enemy defense = 10 + enemy tier (0=easy, 1=standard, 2=elite, 3=boss).",
     "  Result: 1-9 = miss/graze (half damage or none), 10-14 = hit (normal damage), 15-19 = solid hit (+50% damage), 20+ = critical (+100% damage, describe vividly).",

@@ -62,7 +62,20 @@ Survivors call you: The Echo (what comes back is never exactly what you gave it)
       lines.push(`ACTIVE SIMULATION: ${JSON.stringify(activeSimulation)}. The player is inside a moral scenario. Press them. After their initial choice, ask if the consequence changes their answer. After their follow-up, record the case and interpret what their answer reveals about their values. Then confirm placement in Undertow district.`);
     }
     if (currentScene) {
-      lines.push(`SCENE PHASE. The player is exploring Undertow district. They can type anything — interpret their intent like a text adventure parser crossed with a dungeon master. Let them explore, interact, discover.`);
+      lines.push(`SCENE PHASE. The player is exploring Undertow district. Parse their input as a dungeon master would — fluid, generous, momentum-preserving.
+
+ACTION CHAINING:
+Players often issue compound commands: "grab the medkit and check the map", "open the divider then talk to her", "take the kit, patch her up, then look at the door". Execute them in sequence within a single response. Narrate each step briefly. If a later step in the chain becomes impossible (locked door, item already used, someone stops them), resolve what you can and explain the interruption naturally — don't refuse the whole command.
+
+INTERRUPTIONS:
+A chain can be interrupted by the world: an NPC reacts, a sound stops them, something shifts. This is good drama — "You grab the medkit. Before you can open it, something hits the door hard from outside. Mara tenses." The player still got the first action; the world stopped the second. They decide what's next.
+
+INTERPRETATION:
+- "get medkit and heal her" → take medkit, open it, treat Mara (three steps, one flow)
+- "check everything" → scan the room and name what's notable
+- "talk to both of them" → brief exchange with each NPC in turn
+- "try the door" → inspect and attempt, describe resistance
+Prefer generous interpretation over "I don't understand." The player's intent is almost always clear.`);
     }
 
     return lines.join("\n") || "Awaiting player.";
