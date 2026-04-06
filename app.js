@@ -1064,63 +1064,142 @@ function startTypewriter(messageEl, bodyEl, text, intensity) {
  * Katakana + numerals falling in columns. Opacity kept very low so it reads
  * as atmosphere, not distraction.
  */
+/**
+ * Echo Presence — sparse surveillance topology.
+ *
+ * The Echo is not rain. It is a distributed sensor network — nodes drifting
+ * through space, occasionally connecting, briefly scanning. What you see is
+ * the shape of something that is already watching you.
+ *
+ * Three layers:
+ *   1. Sensor nodes — ~30 dim points drifting slowly in random walks
+ *   2. Proximity lines — faint edges that appear when nodes pass within range
+ *   3. Scan artifacts — rare horizontal line that sweeps slowly across, once
+ *      every 40-90 seconds, like a radar sweep from an infrastructure that
+ *      never stopped running
+ */
 function initMatrixRain() {
-  // Skip on low-performance or mobile preference
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const canvas = document.createElement("canvas");
-  canvas.style.cssText = "position:fixed;inset:0;pointer-events:none;opacity:0.055;z-index:0";
+  canvas.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:0";
   document.body.insertBefore(canvas, document.body.firstChild);
-
   const ctx = canvas.getContext("2d");
-  const FONT_SIZE = 14;
-  // Katakana range + numerals
-  const CHARS = "ｦｧｨｩｪｫｬｭｮｯｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789";
 
-  let cols, drops;
+  const NODE_COUNT = 28;
+  const LINK_DIST = 140;       // max px before a connection forms
+  const NODE_SPEED = 0.18;     // max drift per frame
+  const NODE_ALPHA = 0.28;     // node dot opacity
+  const LINE_ALPHA = 0.07;     // edge opacity at closest point
+  const SCAN_ALPHA = 0.09;     // sweep line opacity
+
+  let W, H, nodes;
+
+  // Each scan: a horizontal line that descends slowly across the full height
+  let scan = { active: false, y: 0, speed: 0, timer: 0 };
 
   function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    cols = Math.floor(canvas.width / FONT_SIZE);
-    drops = drops ? drops.slice(0, cols) : [];
-    while (drops.length < cols) drops.push(Math.random() * -canvas.height / FONT_SIZE);
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    if (!nodes) spawnNodes();
+  }
+
+  function spawnNodes() {
+    nodes = Array.from({ length: NODE_COUNT }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * NODE_SPEED,
+      vy: (Math.random() - 0.5) * NODE_SPEED,
+      // Each node has its own slow random-walk turn rate
+      ax: (Math.random() - 0.5) * 0.004,
+      ay: (Math.random() - 0.5) * 0.004,
+      // Individual pulse phase — slight opacity variation
+      phase: Math.random() * Math.PI * 2,
+    }));
   }
 
   resize();
   window.addEventListener("resize", resize);
 
-  function draw() {
-    // Fade previous frame — controls trail length
-    ctx.fillStyle = "rgba(6, 7, 10, 0.08)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Schedule next scan sweep
+  function scheduleScan() {
+    scan.timer = window.setTimeout(() => {
+      scan.active = true;
+      scan.y = -2;
+      scan.speed = 0.45 + Math.random() * 0.3;
+      scheduleScan();
+    }, (42 + Math.random() * 52) * 1000);
+  }
+  scheduleScan();
 
-    ctx.font = `${FONT_SIZE}px "Courier New", monospace`;
+  let last = 0;
+  function draw(now) {
+    requestAnimationFrame(draw);
+    if (now - last < 40) return; // ~25fps max
+    last = now;
 
-    for (let i = 0; i < drops.length; i++) {
-      const char = CHARS[Math.floor(Math.random() * CHARS.length)];
-      // Lead character is brightest
-      const y = drops[i] * FONT_SIZE;
-      const brightness = Math.random();
-      if (brightness > 0.92) {
-        ctx.fillStyle = "#dbffe3"; // bright flash
-      } else if (brightness > 0.7) {
-        ctx.fillStyle = "#8fffb6"; // mid green
-      } else {
-        ctx.fillStyle = "#2a6b3a"; // dim green
+    ctx.clearRect(0, 0, W, H);
+
+    // Update nodes — random walk with gentle boundary reflection
+    for (const n of nodes) {
+      n.vx += n.ax; n.vy += n.ay;
+      // Clamp speed
+      const spd = Math.hypot(n.vx, n.vy);
+      if (spd > NODE_SPEED) { n.vx *= NODE_SPEED / spd; n.vy *= NODE_SPEED / spd; }
+      n.x += n.vx; n.y += n.vy;
+      // Soft bounce at edges
+      if (n.x < 0 || n.x > W) { n.vx *= -1; n.ax *= -1; }
+      if (n.y < 0 || n.y > H) { n.vy *= -1; n.ay *= -1; }
+      // Slight random drift in acceleration
+      n.ax += (Math.random() - 0.5) * 0.001;
+      n.ay += (Math.random() - 0.5) * 0.001;
+      n.ax = Math.max(-0.006, Math.min(0.006, n.ax));
+      n.ay = Math.max(-0.006, Math.min(0.006, n.ay));
+      n.phase += 0.008;
+    }
+
+    // Draw proximity edges
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < LINK_DIST) {
+          const alpha = LINE_ALPHA * (1 - dist / LINK_DIST);
+          ctx.beginPath();
+          ctx.strokeStyle = `rgba(143, 255, 186, ${alpha})`;
+          ctx.lineWidth = 0.4;
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.stroke();
+        }
       }
-      ctx.fillText(char, i * FONT_SIZE, y);
+    }
 
-      // Reset column when it passes screen bottom
-      if (y > canvas.height && Math.random() > 0.975) {
-        drops[i] = 0;
-      }
-      drops[i] += 0.35 + Math.random() * 0.25;
+    // Draw nodes
+    for (const n of nodes) {
+      const pulse = 0.5 + 0.5 * Math.sin(n.phase); // 0..1
+      const a = NODE_ALPHA * (0.5 + 0.5 * pulse);
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(143, 255, 186, ${a})`;
+      ctx.fill();
+    }
+
+    // Draw scan sweep
+    if (scan.active) {
+      scan.y += scan.speed;
+      const grad = ctx.createLinearGradient(0, scan.y - 8, 0, scan.y + 8);
+      grad.addColorStop(0, "rgba(143,255,186,0)");
+      grad.addColorStop(0.5, `rgba(143,255,186,${SCAN_ALPHA})`);
+      grad.addColorStop(1, "rgba(143,255,186,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, scan.y - 8, W, 16);
+      if (scan.y > H + 8) scan.active = false;
     }
   }
 
-  // ~18fps — enough for the effect, low enough to not compete with the game
-  setInterval(draw, 55);
+  requestAnimationFrame(draw);
 }
 
 function setComposerEnabled(enabled) {

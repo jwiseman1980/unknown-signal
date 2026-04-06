@@ -245,68 +245,56 @@ class AudioEngine {
   }
 
   // ────────────────────────────────────────────────────────────────
-  // Digital glitch bursts — fired when The Echo outputs text
-  // Short-lived oscillators + noise fragments scheduled in the future
+  // Echo Resonance — fired when The Echo outputs text
+  //
+  // Not a beep. Not a computer sound. The feeling that something vast
+  // and distributed briefly turned its attention toward you.
+  //
+  // Two nearly-identical sine oscillators tuned ~3-5 Hz apart create
+  // a slow beating artifact — an interference pattern felt in the chest
+  // more than heard. The city's infrastructure hum shifting slightly
+  // as the Echo focuses.
+  //
+  // Attack: 120ms (gradual presence, not a click)
+  // Hold: variable
+  // Decay: 700ms (fades before the next line begins)
+  // Amplitude: 0.028 max — very quiet, subliminal
   // ────────────────────────────────────────────────────────────────
 
-  _fireDigitalBurst(count) {
+  _fireDigitalBurst(_count) {
     const ctx = this.ctx;
     const master = this.masterGain;
-    const n = count || 5;
+    const now = ctx.currentTime;
 
-    for (let i = 0; i < n; i++) {
-      const when = ctx.currentTime + 0.04 + Math.random() * 1.4;
-      const dur = 0.006 + Math.random() * 0.055;
+    // Base frequency: low-mid range (150-200Hz) — below speech, above sub-bass
+    // Varies slightly each call so it never sounds identical
+    const base = 155 + Math.random() * 38;
+    const beat = 3.2 + Math.random() * 2.4; // beating frequency 3-6 Hz
 
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const g = ctx.createGain();
 
-      osc.type =
-        Math.random() > 0.55
-          ? "square"
-          : Math.random() > 0.5
-            ? "sawtooth"
-            : "sine";
-      osc.frequency.value = 280 + Math.random() * 5200;
+    osc1.type = "sine";
+    osc1.frequency.value = base;
+    osc2.type = "sine";
+    osc2.frequency.value = base + beat;
 
-      g.gain.setValueAtTime(0, when);
-      g.gain.linearRampToValueAtTime(0.055, when + 0.001);
-      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    // Envelope: rise → hold → fade
+    const peak = 0.014 + Math.random() * 0.014; // 0.014–0.028
+    const holdEnd = now + 0.12 + Math.random() * 0.25;
+    const releaseEnd = holdEnd + 0.65;
 
-      osc.connect(g);
-      g.connect(master);
-      osc.start(when);
-      osc.stop(when + dur + 0.01);
-    }
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(peak, now + 0.12);
+    g.gain.setValueAtTime(peak, holdEnd);
+    g.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
 
-    // Occasional short noise static burst (data decay feeling)
-    if (Math.random() > 0.38) {
-      const sr = ctx.sampleRate;
-      const when = ctx.currentTime + Math.random() * 0.7;
-      const len = Math.floor(sr * (0.04 + Math.random() * 0.06));
-
-      const nbuf = ctx.createBuffer(1, len, sr);
-      const nd = nbuf.getChannelData(0);
-      for (let j = 0; j < nd.length; j++) nd[j] = Math.random() * 2 - 1;
-
-      const nsrc = ctx.createBufferSource();
-      nsrc.buffer = nbuf;
-
-      const filt = ctx.createBiquadFilter();
-      filt.type = "bandpass";
-      filt.frequency.value = 1800 + Math.random() * 3500;
-      filt.Q.value = 1.8;
-
-      const ng = ctx.createGain();
-      ng.gain.setValueAtTime(0, when);
-      ng.gain.linearRampToValueAtTime(0.07, when + 0.004);
-      ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
-
-      nsrc.connect(filt);
-      filt.connect(ng);
-      ng.connect(master);
-      nsrc.start(when);
-    }
+    osc1.connect(g); osc2.connect(g);
+    g.connect(master);
+    osc1.start(now); osc2.start(now);
+    osc1.stop(releaseEnd + 0.05);
+    osc2.stop(releaseEnd + 0.05);
   }
 
   // ────────────────────────────────────────────────────────────────
