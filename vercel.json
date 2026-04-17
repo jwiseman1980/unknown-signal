@@ -11,7 +11,8 @@
     "api/shadow.js": { "maxDuration": 15 },
     "api/world-state.js": { "maxDuration": 15 },
     "api/idle.js": { "maxDuration": 60 },
-    "api/notify.js": { "maxDuration": 10 }
+    "api/notify.js": { "maxDuration": 10 },
+    "api/ably-token.js": { "maxDuration": 5 }
   },
   "crons": [
     {

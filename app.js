@@ -34,6 +34,12 @@ const transitionPanel = document.querySelector("#transitionPanel");
 const transitionCopy = document.querySelector("#transitionCopy");
 const placeMe = document.querySelector("#placeMe");
 const undertowPanel = document.querySelector("#undertowPanel");
+const mpToggle = document.querySelector("#mpToggle");
+const multiplayerPanel = document.querySelector("#multiplayerPanel");
+const mpStatus = document.querySelector("#mpStatus");
+const mpCreate = document.querySelector("#mpCreate");
+const mpCodeInput = document.querySelector("#mpCodeInput");
+const mpJoin = document.querySelector("#mpJoin");
 const sceneTitle = document.querySelector("#sceneTitle");
 const undertowSummary = document.querySelector("#undertowSummary");
 const API_BASE = "/api";
@@ -300,6 +306,7 @@ function boot() {
   queueIntro();
   initMatrixRain();
   initAudioControls();
+  initMultiplayer();
 }
 
 function setupSpeechRecognition() {
@@ -530,6 +537,7 @@ function submitInput(text, fromVoice) {
   }
 
   addMessage("player", text);
+  if (window.multiplayer?.connected) window.multiplayer.broadcastPlayer(text);
   playerInput.value = "";
   state.interactionCount += 1;
   classifyInput(text);
@@ -932,7 +940,7 @@ function addMessage(role, text) {
 
   const meta = document.createElement("span");
   meta.className = "message-meta";
-  meta.textContent = role === "echo" ? "Unknown Signal" : "You";
+  meta.textContent = role === "echo" ? "Unknown Signal" : role === "party" ? "Party" : "You";
 
   const body = document.createElement("div");
   message.append(meta, body);
@@ -959,6 +967,7 @@ function queueEchoReplies(replies, fromVoice) {
     await echoSleep(100);
     for (let i = 0; i < replies.length; i++) {
       await addMessage("echo", replies[i]);
+      if (window.multiplayer?.connected) window.multiplayer.broadcastEcho(replies[i]);
       if (state.voiceEnabled) speak(replies[i]);
       // Pause between lines — skip if user clicked
       if (i < replies.length - 1) await echoSleep(160);
@@ -1082,6 +1091,69 @@ function startTypewriter(messageEl, bodyEl, text, intensity) {
  *      every 40-90 seconds, like a radar sweep from an infrastructure that
  *      never stopped running
  */
+function initMultiplayer() {
+  // Expose hook for multiplayer.js to render incoming messages
+  window._mpAddMessage = (role, text) => addMessage(role, text);
+
+  if (!mpToggle) return;
+
+  mpToggle.addEventListener("click", () => {
+    multiplayerPanel.classList.toggle("hidden");
+  });
+
+  mpCreate.addEventListener("click", async () => {
+    const token = getOrCreateContactToken();
+    const label = (state.memory?.selfLabel || "").slice(0, 20) || "Player";
+    mpCreate.textContent = "Creating...";
+    mpCreate.disabled = true;
+    try {
+      const resp = await fetch(`${API_BASE}/group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", contactToken: token, sessionLabel: label }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || "create_failed");
+      await window.multiplayer.connect(data.inviteCode, label);
+      mpStatus.textContent = `Session: ${data.inviteCode} — share this code.`;
+      mpCreate.textContent = "Session Active";
+      mpCodeInput.disabled = true;
+      mpJoin.disabled = true;
+    } catch (err) {
+      mpStatus.textContent = `Failed: ${err.message}`;
+      mpCreate.textContent = "Create Session";
+      mpCreate.disabled = false;
+    }
+  });
+
+  mpJoin.addEventListener("click", async () => {
+    const code = mpCodeInput.value.trim().toUpperCase();
+    if (!code) return;
+    const token = getOrCreateContactToken();
+    const label = (state.memory?.selfLabel || "").slice(0, 20) || "Player";
+    mpJoin.textContent = "Joining...";
+    mpJoin.disabled = true;
+    try {
+      const resp = await fetch(`${API_BASE}/group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "join", contactToken: token, groupCode: code, sessionLabel: label }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || "join_failed");
+      await window.multiplayer.connect(data.inviteCode, label);
+      mpStatus.textContent = `Joined: ${data.inviteCode} — ${data.memberCount} players connected.`;
+      mpCreate.disabled = true;
+      mpJoin.textContent = "Joined";
+      mpCodeInput.disabled = true;
+    } catch (err) {
+      mpStatus.textContent = err.message === "group_not_found" ? "Session not found." : `Failed: ${err.message}`;
+      mpJoin.textContent = "Join";
+      mpJoin.disabled = false;
+    }
+  });
+}
+
 function initMatrixRain() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 

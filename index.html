@@ -37,6 +37,9 @@
             <button id="identityToggle" class="ghost-button topbar-button" type="button">
               Identity
             </button>
+            <button id="mpToggle" class="ghost-button topbar-button" type="button">
+              Co-op
+            </button>
           </div>
         </div>
 
@@ -68,6 +71,26 @@
           <p class="identity-note">
             Use a thread key to return to the same contact line later. Full cross-device restoration becomes real once the persistent backend is live.
           </p>
+        </section>
+
+        <section id="multiplayerPanel" class="identity-panel hidden">
+          <p class="eyebrow">Co-op Session</p>
+          <p id="mpStatus" class="identity-copy">Share a narrative with another player.</p>
+          <div class="identity-actions">
+            <button id="mpCreate" class="ghost-button" type="button">Create Session</button>
+          </div>
+          <div class="identity-row">
+            <input
+              id="mpCodeInput"
+              type="text"
+              placeholder="Enter session code"
+              maxlength="6"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="mpJoin" class="ghost-button" type="button">Join</button>
+          </div>
+          <p class="identity-note">Two players, one DM. Each input advances the shared story.</p>
         </section>
 
         <section id="transitionPanel" class="transition-panel hidden">
@@ -277,8 +300,10 @@
       </aside>
     </main>
 
+    <script src="https://cdn.ably.com/lib/ably.umd.min-2.js"></script>
     <script src="./audio.js"></script>
     <script src="./creator.js"></script>
+    <script src="./multiplayer.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
