@@ -68,6 +68,26 @@
           <p class="identity-note">
             Use a thread key to return to the same contact line later. Full cross-device restoration becomes real once the persistent backend is live.
           </p>
+
+          <hr class="identity-divider" />
+          <p class="eyebrow">Linked Play</p>
+          <p class="identity-note">Play with someone else. One of you creates a thread — the other joins with the code.</p>
+          <div class="identity-actions">
+            <button id="mpCreateGroup" class="ghost-button" type="button">Create Thread</button>
+          </div>
+          <div class="identity-row">
+            <input
+              id="mpGroupCodeInput"
+              type="text"
+              maxlength="6"
+              placeholder="Enter code"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="mpJoinGroup" class="ghost-button" type="button">Join Thread</button>
+          </div>
+          <p id="mpGroupCodeDisplay" class="group-code hidden"></p>
+          <p id="mpGroupStatus" class="identity-note"></p>
         </section>
 
         <section id="transitionPanel" class="transition-panel hidden">
@@ -277,8 +297,10 @@
       </aside>
     </main>
 
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <script src="./audio.js"></script>
     <script src="./creator.js"></script>
     <script src="./app.js"></script>
+    <script src="./multiplayer.js"></script>
   </body>
 </html>
