@@ -131,6 +131,19 @@ body::after {
   font-size: 0.9rem;
 }
 
+.identity-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
+
+.group-code {
+  font-size: 1.2rem;
+  color: var(--accent);
+  letter-spacing: 0.2em;
+  margin: 10px 0 4px;
+}
+
 .identity-actions,
 .identity-row {
   display: flex;

@@ -530,6 +530,7 @@ function submitInput(text, fromVoice) {
   }
 
   addMessage("player", text);
+  if (window.multiplayerPublishAction) window.multiplayerPublishAction(text);
   playerInput.value = "";
   state.interactionCount += 1;
   classifyInput(text);
@@ -815,6 +816,7 @@ async function callWorldAPI(input, fromVoice) {
     // Queue the reply lines
     const replies = Array.isArray(result.replies) ? result.replies : ["The city shifts but offers no clear answer."];
     queueEchoReplies(replies, fromVoice);
+    if (window.multiplayerPublishNarrative) window.multiplayerPublishNarrative(input, replies);
 
   } catch (error) {
     console.error("World API call failed, falling back to local:", error);
