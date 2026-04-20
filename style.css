@@ -269,6 +269,7 @@ select {
   padding: 0;
   font: inherit;
   font-size: 16px;
+  color-scheme: dark;
 }
 
 input[type="text"]::placeholder,
@@ -479,12 +480,18 @@ select:focus-visible {
     -webkit-overflow-scrolling: touch;
     /* Slightly larger text for readability on small screens */
     font-size: 0.97rem;
+    /* Keep last message above the fixed input bar */
+    padding-bottom: 200px;
   }
 
   .composer {
-    position: sticky;
+    /* Fixed to viewport so it never scrolls behind conversation */
+    position: fixed;
     bottom: 0;
-    padding: 10px 0 max(14px, env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 10px 14px max(20px, env(safe-area-inset-bottom));
     background: linear-gradient(180deg, rgba(6, 7, 10, 0), rgba(6, 7, 10, 0.94) 28%, rgba(6, 7, 10, 0.99) 100%);
   }
 
