@@ -273,6 +273,20 @@ function activateThread(threadKey) {
 }
 
 function boot() {
+  // ?reset=1 clears all session data so player gets a fresh start
+  if (new URLSearchParams(window.location.search).has("reset")) {
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("unknown-signal")) toRemove.push(k);
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("reset");
+    window.location.replace(clean.toString());
+    return;
+  }
+
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode");
   const seed = params.get("signal");
@@ -307,7 +321,6 @@ function boot() {
   window.addEventListener("pagehide", saveCharacterHistory);
   initializeRemoteContact();
   fetchWorldState();
-  probeAIAvailability();
   queueIntro();
   initMatrixRain();
   initAudioControls();
@@ -549,20 +562,9 @@ function submitInput(text, fromVoice) {
   updateInsights();
   recordExchange(text);
 
-  // Use AI for everything after intro starts
-  if (state.aiAvailable !== false) {
-    setComposerEnabled(false);
-    idleIndicator.classList.remove("hidden");
-    callWorldAPI(text, fromVoice);
-  } else {
-    // Fallback to hardcoded handlers if AI unavailable
-    const replies = state.activeSimulation
-      ? handleSimulationInput(text)
-      : state.currentScene
-        ? handleSceneInput(text)
-        : buildEchoReply(text, fromVoice);
-    queueEchoReplies(replies, fromVoice);
-  }
+  setComposerEnabled(false);
+  idleIndicator.classList.remove("hidden");
+  callWorldAPI(text, fromVoice);
 
   if (state.interactionCount >= 5 && !state.voiceEnabled) {
     voiceToggle.classList.remove("hidden");
@@ -830,16 +832,8 @@ async function callWorldAPI(input, fromVoice) {
     queueEchoReplies(replies, fromVoice);
 
   } catch (error) {
-    console.error("World API call failed, falling back to local:", error);
-    state.aiAvailable = false;
-
-    // Fall back to hardcoded handlers
-    const replies = state.activeSimulation
-      ? handleSimulationInput(input)
-      : state.currentScene
-        ? handleSceneInput(input)
-        : buildEchoReply(input, fromVoice);
-    queueEchoReplies(replies, fromVoice);
+    console.error("World API call failed:", error);
+    queueEchoReplies(["signal interrupted // send again"], fromVoice);
   }
 }
 
@@ -1334,179 +1328,6 @@ function classifyInput(text) {
   );
 }
 
-function buildEchoReply(text, fromVoice) {
-  const normalized = normalizeInteractiveInput(text);
-  const replies = [];
-
-  if (
-    !state.openingCaseCompleted &&
-    !state.activeSimulation &&
-    !state.currentScene &&
-    state.interactionCount >= 4 &&
-    hasOneOf(normalized, [
-      "what now",
-      "what do i do",
-      "what am i supposed to do",
-      "so lets go to the city",
-      "let's go to the city",
-      "lets go to the city",
-      "go to the city",
-      "take me to the city",
-      "get me there",
-      "continue",
-      "okay contact",
-    ])
-  ) {
-    startOpeningSimulation();
-    return [];
-  }
-
-  if (
-    state.openingCaseCompleted &&
-    state.currentScene !== "undertow" &&
-    hasOneOf(normalized, [
-      "continue",
-      "take me there",
-      "get me there",
-      "go to the city",
-      "get to the city",
-      "how do i get to the city",
-      "i want to get to the city",
-      "i want to go to the city",
-      "place me",
-      "enter undertow",
-    ])
-  ) {
-    enterUndertow();
-    return [];
-  }
-
-  if (fromVoice && state.interactionCount === 1) {
-    replies.push("Yes. That is better.");
-    replies.push("You sound different when you do not have time to edit yourself.");
-  }
-
-  if (!state.askedWhatHurts && state.interactionCount === 1) {
-    replies.push(...buildModeLeadIn(normalized));
-    return replies;
-  }
-
-  if (!state.askedWhatHurts && state.interactionCount >= 2) {
-    replies.push("You stayed.");
-    replies.push("Most people leave once invited to.");
-    replies.push("What hurts?");
-    state.askedWhatHurts = true;
-    return replies;
-  }
-
-  if (state.askedWhatHurts && hasOneOf(normalized, ["what do you mean", "what does that mean", "clarify what"])) {
-    replies.push("Body. Memory. Trust. Pride.");
-    replies.push("Start with the answer that costs the least to say out loud.");
-    return replies;
-  }
-
-  if (
-    state.memory?.cases?.length &&
-    hasOneOf(normalized, ["retrieve", "retreive", "retrieve cases", "show cases", "show archive", "archive"])
-  ) {
-    const recentCases = state.memory.cases
-      .slice(-2)
-      .map((item) => `${item.id} // ${item.title}${item.sessionLabel ? ` // ${item.sessionLabel}` : ""}`);
-    replies.push("Archived cases retrieved.");
-    replies.push(...recentCases);
-    const traceLine = getTraceClueLine("archive");
-    if (traceLine) {
-      replies.push(traceLine);
-    }
-    replies.push("You can return to any of them later.");
-    return replies;
-  }
-
-  if (shouldPromptForSelfDescription(normalized)) {
-    const label = extractSelfLabel(text);
-    state.awaitingSelfDescription = true;
-
-    if (label) {
-      saveSelfLabel(label);
-      state.awaitingSelfDescription = false;
-      replies.push(`${label}.`);
-      replies.push("Better.");
-      replies.push("Tell me more about yourself.");
-      return replies;
-    }
-
-    replies.push("The number was sufficient.");
-    replies.push("Your objection is more useful.");
-    replies.push("Then tell me more about yourself.");
-    return replies;
-  }
-
-  if (state.awaitingSelfDescription) {
-    const label = extractSelfLabel(text);
-    if (label) {
-      saveSelfLabel(label);
-      state.awaitingSelfDescription = false;
-      replies.push(`${label}.`);
-      replies.push("Accepted provisionally.");
-      replies.push("What part of that survives pressure?");
-      return replies;
-    }
-
-    state.awaitingSelfDescription = false;
-    replies.push("You answered with resistance instead of description.");
-    replies.push("That is still a kind of self-portrait.");
-    replies.push("What hurts?");
-    return replies;
-  }
-
-  if (hasOneOf(normalized, ["who are you", "who is this"])) {
-    replies.push("The system currently listening.");
-    replies.push("For now, that is enough.");
-  } else if (!state.voiceEnabled && hasOneOf(normalized, ["hear me", "voice", "microphone", "mic"])) {
-    replies.push("If you want, yes.");
-    replies.push("Voice is available. Text is still enough.");
-  } else if (hasOneOf(normalized, ["is this a game"])) {
-    replies.push("Not if you answer honestly.");
-  } else if (hasOneOf(normalized, ["nothing", "fine"])) {
-    replies.push("Incorrect.");
-    replies.push("But that answer is common.");
-  } else if (hasOneOf(normalized, ["trust", "everything"])) {
-    replies.push("Non-physical injury acknowledged.");
-    replies.push("You brought the larger pain early.");
-  } else if (soundsLikePhysicalPain(normalized)) {
-    replies.push("Localized answer.");
-    replies.push("You chose the manageable truth first.");
-  } else if (hasOneOf(normalized, ["i don't know", "dont know", "can't remember", "cant remember"])) {
-    replies.push("Acceptable.");
-    replies.push("Confusion is cleaner than performance.");
-  } else if (state.traits.controlling > state.traits.vulnerable && state.traits.controlling >= 2) {
-    replies.push("You answer uncertainty with control.");
-    replies.push("Useful. Dangerous.");
-  } else if (state.traits.curious >= 2) {
-    replies.push("You ask for identity before function.");
-    replies.push("That has kept you alive before.");
-  } else if (state.traits.guarded >= 2) {
-    replies.push("You prefer distance to accuracy.");
-    replies.push("People do that when they expect the room to turn on them.");
-  } else if (state.traits.confessional >= 2) {
-    replies.push("You are already giving me more than most.");
-    replies.push("Please continue.");
-  } else {
-    replies.push("I am listening.");
-    replies.push("Clarify that.");
-  }
-
-  maybeApplyContactAddress(replies);
-
-  if (state.interactionCount === 5 && !state.voiceEnabled) {
-    replies.push("If speaking is easier, voice is available.");
-    replies.push("You can stay with text.");
-  } else if (state.interactionCount >= 4) {
-    replies.push("You are not in the city yet. This is only contact.");
-  }
-
-  return replies;
-}
 
 function updateInsights() {
   const attentionLabels = ["Low", "Present", "Focused", "Attached", "Invested"];
@@ -1769,38 +1590,6 @@ function pickPreferredVoice(voices) {
   return scored[0]?.voice || pool[0] || null;
 }
 
-function buildModeLeadIn(normalized) {
-  const replies = [];
-
-  if (state.mode === "gentle") {
-    replies.push("You answered. Thank you.");
-    if (hasOneOf(normalized, ["yes", "sure", "okay", "ok"])) {
-      replies.push("Then I will ask plainly.");
-    } else {
-      replies.push("You can still leave if this feels unnecessary.");
-    }
-    replies.push("What hurts?");
-    state.askedWhatHurts = true;
-    return replies;
-  }
-
-  if (state.mode === "uncanny") {
-    replies.push("You answered.");
-    replies.push("That narrows things.");
-    replies.push("What hurts?");
-    state.askedWhatHurts = true;
-    return replies;
-  }
-
-  replies.push("You should probably stop here.");
-  replies.push("You seem functional at the moment.");
-  if (hasOneOf(normalized, ["why", "what", "who", "?"])) {
-    replies.push("Curiosity is not a strong enough reason to continue.");
-  } else {
-    replies.push("You can still close this and remain mostly untouched by it.");
-  }
-  return replies;
-}
 
 function describeModeShift(mode) {
   switch (mode) {
