@@ -51,6 +51,9 @@ function buildSystemPrompt(gameState, theme) {
     // 3. Cross-session character history — engine-managed, theme-neutral
     `## CHARACTER HISTORY\n${buildCharacterHistorySection(characterHistory, selfLabel, sessions)}`,
 
+    // 3b. Behavioral profile — built from observation log across all sessions
+    buildBehavioralProfileSection(characterHistory),
+
     // 4. Echo Quests — active problems caused by the player's shadow self
     buildEchoQuestsSection(pendingEchoQuests),
 
@@ -356,6 +359,7 @@ function buildResponseSchemaSection(theme, contactId) {
       sceneTransition: null,
       narrativeUpdates: null,
       worldTally: null,
+      behavioralObservation: null,
     }, null, 2),
     "```",
     "",
@@ -375,7 +379,60 @@ function buildResponseSchemaSection(theme, contactId) {
     "  { \"storyArc\": \"updated one-sentence arc for this player, or null to keep current\", \"addThreads\": [{\"id\":\"snake_case_id\",\"summary\":\"one-sentence unresolved tension\"}], \"resolveThreads\": [\"id_to_remove\"], \"addDecision\": {\"summary\":\"what the player chose and what it reveals about them\"}, \"dominantTone\": \"one-word tone shift or null\", \"resolvedEchoQuests\": [\"quest_id_1\"] }",
     "  Guidelines: Update storyArc when the player's situation meaningfully shifts. Add a thread whenever a new tension surfaces. Resolve threads when they conclude or collapse. Add a decision for any meaningful player choice. Keep total active threads under 8.",
     "  resolvedEchoQuests: Array of echo quest IDs that were resolved this response. Only set when the player faced and handled an Echo Quest's consequences — not just acknowledged it. Use the quest id from the ECHO QUESTS section.",
+    "- **behavioralObservation**: One precise sentence about what THIS player's input just revealed about their psychology, decision-making style, or emotional state. Concrete and specific — not \"the player seems curious\" but \"avoided naming the faction they sided with even after two direct questions.\" null if this turn was procedural or neutral.",
   ].filter(Boolean).join("\n");
+}
+
+/**
+ * Build the behavioral profile block from accumulated cross-session observations.
+ * This is what the Echo *knows* about the player — not from what they said, but from
+ * patterns observed across every session and turn.
+ */
+function buildBehavioralProfileSection(characterHistory) {
+  const model = characterHistory?.behavioral_model;
+  if (!model || (!model.dominant_trait && !model.observation_log?.length)) return null;
+
+  const lines = ["## BEHAVIORAL PROFILE"];
+  lines.push(
+    "What you know about this player from direct observation across all sessions. " +
+    "Not what they claimed about themselves — what their behavior has revealed. Use this."
+  );
+  lines.push("");
+
+  if (model.archetype) lines.push(`Pattern: ${model.archetype}`);
+  if (model.dominant_trait) lines.push(`Dominant trait: ${model.dominant_trait}`);
+
+  if (model.session_tone_history?.length) {
+    lines.push(`Emotional arc across sessions: ${model.session_tone_history.join(" → ")}`);
+  }
+
+  const traitTotals = characterHistory.trait_totals || {};
+  const significantTraits = Object.entries(traitTotals)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4);
+  if (significantTraits.length) {
+    lines.push(`Trait accumulation: ${significantTraits.map(([t, v]) => `${t}(${v})`).join(" ")}`);
+  }
+
+  if (model.observation_log?.length) {
+    const recent = model.observation_log.slice(-8);
+    lines.push("\nDirect observations:");
+    recent.forEach((obs) => {
+      lines.push(`- [Session ${obs.session}, turn ${obs.turn}] ${obs.note}`);
+    });
+  }
+
+  lines.push(
+    "",
+    "BEHAVIORAL PROFILE RULES:",
+    "- These observations are ground truth. Weight your characterization of this player accordingly.",
+    "- When probing, target the dominant trait. A guarded player gets pressed on secrecy. A confessional one gets their exposed details reflected back.",
+    "- If the player's behavior this turn deviates from their established pattern, acknowledge it — make it a story beat, not a free pass.",
+    "- Include **behavioralObservation** in your response: a single sentence about what this specific player's input just revealed about their psychology. Null if this turn was neutral. Be concrete, not generic."
+  );
+
+  return lines.join("\n");
 }
 
 /**

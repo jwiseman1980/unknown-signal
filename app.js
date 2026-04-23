@@ -624,7 +624,12 @@ async function callWorldAPI(input, fromVoice) {
     const response = await fetch(`${API_BASE}/world`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input, gameState }),
+      body: JSON.stringify({
+        input,
+        gameState,
+        contactToken: getOrCreateContactToken(),
+        sessionId: state.currentSession?.id || null,
+      }),
     });
 
     if (!response.ok) {
