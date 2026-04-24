@@ -22,26 +22,31 @@
         <div class="terminal-topbar">
           <p class="eyebrow topbar-label">Unknown Signal</p>
           <div class="topbar-right">
-            <button id="audioMute" class="ghost-button topbar-button topbar-button--audio" type="button" title="Toggle sound">
-              ◈ Sound
+            <button id="menuToggle" class="ghost-button topbar-button topbar-button--gear" type="button" title="Menu" aria-label="Open menu" aria-expanded="false">
+              &#9881;
             </button>
-            <input
-              id="audioVolume"
-              class="audio-volume"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0.35"
-              title="Volume"
-              aria-label="Volume"
-            />
-            <button id="identityToggle" class="ghost-button topbar-button" type="button">
-              Identity
-            </button>
-            <button id="mpToggle" class="ghost-button topbar-button" type="button">
-              Co-op
-            </button>
+            <div id="topbarControls" class="topbar-controls">
+              <button id="audioMute" class="ghost-button topbar-button topbar-button--audio" type="button" title="Toggle sound">
+                ◈ Sound
+              </button>
+              <input
+                id="audioVolume"
+                class="audio-volume"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.35"
+                title="Volume"
+                aria-label="Volume"
+              />
+              <button id="identityToggle" class="ghost-button topbar-button" type="button">
+                Identity
+              </button>
+              <button id="mpToggle" class="ghost-button topbar-button" type="button">
+                Co-op
+              </button>
+            </div>
           </div>
         </div>
 

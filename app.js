@@ -37,6 +37,8 @@ const transitionCopy = document.querySelector("#transitionCopy");
 const placeMe = document.querySelector("#placeMe");
 const undertowPanel = document.querySelector("#undertowPanel");
 const mpToggle = document.querySelector("#mpToggle");
+const menuToggle = document.querySelector("#menuToggle");
+const topbarControls = document.querySelector("#topbarControls");
 const multiplayerPanel = document.querySelector("#multiplayerPanel");
 const mpStatus = document.querySelector("#mpStatus");
 const mpCreate = document.querySelector("#mpCreate");
@@ -405,7 +407,22 @@ voiceToggle.addEventListener("click", () => {
 
 identityToggle.addEventListener("click", () => {
   identityPanel.classList.toggle("hidden");
+  if (topbarControls) topbarControls.classList.remove("menu-open");
 });
+
+if (menuToggle && topbarControls) {
+  menuToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = topbarControls.classList.toggle("menu-open");
+    menuToggle.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (e) => {
+    if (!menuToggle.contains(e.target) && !topbarControls.contains(e.target)) {
+      topbarControls.classList.remove("menu-open");
+      menuToggle.setAttribute("aria-expanded", "false");
+    }
+  });
+}
 
 skillsToggle.addEventListener("click", () => {
   const open = skillsRow.classList.toggle("skills-open");
@@ -572,6 +589,7 @@ function submitInput(text, fromVoice) {
 
   setComposerEnabled(false);
   idleIndicator.classList.remove("hidden");
+  showTypingIndicator();
   callWorldAPI(text, fromVoice);
 
   if (state.interactionCount >= 5 && !state.voiceEnabled) {
@@ -953,6 +971,21 @@ function startRoundtimeCountdown(seconds) {
   }, 1000);
 }
 
+function showTypingIndicator() {
+  removeTypingIndicator();
+  const el = document.createElement("div");
+  el.id = "typingIndicator";
+  el.className = "typing-indicator";
+  el.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div><span>signal processing</span>`;
+  conversationEl.appendChild(el);
+  conversationEl.scrollTop = conversationEl.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  const el = document.querySelector("#typingIndicator");
+  if (el) el.remove();
+}
+
 function addMessage(role, text) {
   state.messages.push({ role, text });
   recordSessionEvent(role, text);
@@ -986,6 +1019,7 @@ function queueEchoReplies(replies, fromVoice) {
   if (window.audioEngine) window.audioEngine.onEchoSpeaking();
 
   state.echoQueue = state.echoQueue.then(async () => {
+    removeTypingIndicator();
     await echoSleep(100);
     for (let i = 0; i < replies.length; i++) {
       await addMessage("echo", replies[i]);
