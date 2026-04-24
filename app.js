@@ -832,9 +832,19 @@ async function callWorldAPI(input, fromVoice) {
       persistResolvedEchoQuests(resolvedIds);
     }
 
-    // Queue the reply lines
-    const replies = Array.isArray(result.replies) ? result.replies : ["The city shifts but offers no clear answer."];
-    queueEchoReplies(replies, fromVoice);
+    // Queue the reply lines — unwrap any JSON-wrapped strings before displaying.
+    const rawReplies = Array.isArray(result.replies) ? result.replies : [];
+    const replies = rawReplies.flatMap((r) => {
+      if (typeof r !== "string") return [];
+      try {
+        const inner = JSON.parse(r);
+        if (Array.isArray(inner?.replies)) {
+          return inner.replies.filter((s) => typeof s === "string" && s.trim());
+        }
+      } catch {}
+      return r.trim() ? [r] : [];
+    });
+    queueEchoReplies(replies.length ? replies : ["The city shifts but offers no clear answer."], fromVoice);
 
   } catch (error) {
     console.error("World API call failed:", error);

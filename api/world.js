@@ -104,6 +104,23 @@ module.exports = async function handler(req, res) {
       parsed.replies = ["The city shifts but offers no clear answer."];
     }
 
+    // If any reply item is itself a JSON-wrapped object, unwrap the inner text.
+    // This happens when the AI mislearns the format and nests {"replies":[...]}
+    // inside the replies array instead of writing plain strings.
+    parsed.replies = parsed.replies.flatMap((r) => {
+      if (typeof r !== "string") return [];
+      try {
+        const inner = JSON.parse(r);
+        if (Array.isArray(inner?.replies)) {
+          return inner.replies.filter((s) => typeof s === "string" && s.trim());
+        }
+      } catch {}
+      return r.trim() ? [r] : [];
+    });
+    if (!parsed.replies.length) {
+      parsed.replies = ["The city shifts but offers no clear answer."];
+    }
+
     // ── Supabase: persist turn + update behavioral model ──────────────────
     if (isSupabaseConfigured() && contactToken && input !== "__probe__") {
       persistTurnAsync(contactToken, sessionId, input, parsed, gameState).catch((err) =>

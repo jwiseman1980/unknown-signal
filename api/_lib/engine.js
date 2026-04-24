@@ -520,14 +520,26 @@ function buildNarrativeSection(memory) {
 function buildMessages(input, gameState) {
   const history = (gameState.recentMessages || []).slice(-20);
   const messages = [];
+  let i = 0;
 
-  for (const msg of history) {
-    messages.push({
-      role: msg.role === "player" ? "user" : "assistant",
-      content: msg.role === "player"
-        ? msg.text
-        : JSON.stringify({ replies: [msg.text], stateChanges: {} }),
-    });
+  while (i < history.length) {
+    const msg = history[i];
+    if (msg.role === "player") {
+      messages.push({ role: "user", content: msg.text });
+      i++;
+    } else {
+      // Collect consecutive echo lines into one assistant turn so the AI
+      // learns that multiple reply strings belong in a single replies array.
+      const echoTexts = [];
+      while (i < history.length && history[i].role !== "player") {
+        echoTexts.push(history[i].text);
+        i++;
+      }
+      messages.push({
+        role: "assistant",
+        content: JSON.stringify({ replies: echoTexts, stateChanges: {} }),
+      });
+    }
   }
 
   messages.push({ role: "user", content: input });
