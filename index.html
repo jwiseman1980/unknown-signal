@@ -22,26 +22,29 @@
         <div class="terminal-topbar">
           <p class="eyebrow topbar-label">Unknown Signal</p>
           <div class="topbar-right">
-            <button id="audioMute" class="ghost-button topbar-button topbar-button--audio" type="button" title="Toggle sound">
-              ◈ Sound
-            </button>
-            <input
-              id="audioVolume"
-              class="audio-volume"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0.35"
-              title="Volume"
-              aria-label="Volume"
-            />
-            <button id="identityToggle" class="ghost-button topbar-button" type="button">
-              Identity
-            </button>
-            <button id="mpToggle" class="ghost-button topbar-button" type="button">
-              Co-op
-            </button>
+            <div class="topbar-extras" id="topbarExtras">
+              <button id="audioMute" class="ghost-button topbar-button topbar-button--audio" type="button" title="Toggle sound">
+                ◈ Sound
+              </button>
+              <input
+                id="audioVolume"
+                class="audio-volume"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.35"
+                title="Volume"
+                aria-label="Volume"
+              />
+              <button id="identityToggle" class="ghost-button topbar-button" type="button">
+                Identity
+              </button>
+              <button id="mpToggle" class="ghost-button topbar-button" type="button">
+                Co-op
+              </button>
+            </div>
+            <button id="menuToggle" class="ghost-button topbar-button topbar-button--menu" type="button" aria-label="Menu" aria-expanded="false">≡</button>
           </div>
         </div>
 
@@ -145,8 +148,9 @@
         </section>
 
         <div id="conversation" class="conversation" aria-live="polite"></div>
-        <div id="idleIndicator" class="idle-indicator" aria-hidden="true">
-          <span class="cursor-block"></span>
+        <div id="idleIndicator" class="idle-indicator hidden" aria-hidden="true">
+          <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+          <span class="typing-label">signal processing</span>
         </div>
 
         <form id="chatForm" class="composer hidden">

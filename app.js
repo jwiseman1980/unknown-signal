@@ -403,7 +403,28 @@ voiceToggle.addEventListener("click", () => {
   recognition.start();
 });
 
+const menuToggle = document.querySelector("#menuToggle");
+const topbarExtras = document.querySelector("#topbarExtras");
+
+function closeMenu() {
+  if (!topbarExtras) return;
+  topbarExtras.classList.remove("open");
+  if (menuToggle) {
+    menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.textContent = "≡";
+  }
+}
+
+if (menuToggle) {
+  menuToggle.addEventListener("click", () => {
+    const open = topbarExtras.classList.toggle("open");
+    menuToggle.setAttribute("aria-expanded", String(open));
+    menuToggle.textContent = open ? "✕" : "≡";
+  });
+}
+
 identityToggle.addEventListener("click", () => {
+  closeMenu();
   identityPanel.classList.toggle("hidden");
 });
 
@@ -967,7 +988,7 @@ function addMessage(role, text) {
   const body = document.createElement("div");
   message.append(meta, body);
   conversationEl.appendChild(message);
-  conversationEl.scrollTop = conversationEl.scrollHeight;
+  conversationEl.scrollTo({ top: conversationEl.scrollHeight, behavior: "smooth" });
   idleIndicator.classList.add("hidden");
 
   if (role === "echo") {
@@ -1120,6 +1141,7 @@ function initMultiplayer() {
   if (!mpToggle) return;
 
   mpToggle.addEventListener("click", () => {
+  closeMenu();
     multiplayerPanel.classList.toggle("hidden");
   });
 
