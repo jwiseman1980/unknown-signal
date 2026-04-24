@@ -31,27 +31,33 @@ module.exports = async function handler(req, res) {
   const enriched = { ...gameState };
 
   if (isKvConfigured()) {
-    // Fetch random shadow profiles for this scene — these become the NPC echoes
-    const { getRandomShadows } = require("./shadow");
-    const scene = gameState.currentScene || null;
-    const shadows = await getRandomShadows(2, scene).catch(() => []);
-    if (shadows.length) enriched.echoShadows = shadows;
-
-    // Fetch NPC profiles for the current scene if theme provides them
-    if (typeof theme.getNpcsForScene === "function" && gameState.currentScene) {
-      const npcTokens = theme.getNpcsForScene(gameState.currentScene);
-      if (npcTokens.length) {
-        const npcProfiles = await Promise.all(
-          npcTokens.map((token) => kvGetJson(`signal:character:${token}`).catch(() => null))
-        );
-        enriched.sceneNpcs = npcProfiles.filter(Boolean);
+    try {
+      // Fetch random shadow profiles for this scene — these become the NPC echoes
+      const { getRandomShadows } = require("./shadow");
+      const scene = gameState.currentScene || null;
+      if (typeof getRandomShadows === "function") {
+        const shadows = await getRandomShadows(2, scene).catch(() => []);
+        if (shadows.length) enriched.echoShadows = shadows;
       }
-    }
 
-    // Fetch shared world state for canon events and faction standings
-    const { getOrInitWorldState } = require("./world-state");
-    const worldState = await getOrInitWorldState().catch(() => null);
-    if (worldState) enriched.sharedWorldState = worldState;
+      // Fetch NPC profiles for the current scene if theme provides them
+      if (typeof theme.getNpcsForScene === "function" && gameState.currentScene) {
+        const npcTokens = theme.getNpcsForScene(gameState.currentScene);
+        if (npcTokens.length) {
+          const npcProfiles = await Promise.all(
+            npcTokens.map((token) => kvGetJson(`signal:character:${token}`).catch(() => null))
+          );
+          enriched.sceneNpcs = npcProfiles.filter(Boolean);
+        }
+      }
+
+      // Fetch shared world state for canon events and faction standings
+      const { getOrInitWorldState } = require("./world-state");
+      const worldState = await getOrInitWorldState().catch(() => null);
+      if (worldState) enriched.sharedWorldState = worldState;
+    } catch (kvErr) {
+      console.error("KV enrichment error:", kvErr.message);
+    }
   }
 
   const systemPrompt = buildSystemPrompt(enriched, theme);

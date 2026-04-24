@@ -223,4 +223,5 @@ async function retireShadow(contactToken) {
 }
 
 module.exports.generateShadow = generateShadow;
+module.exports.getRandomShadows = getRandomShadows;
 module.exports.qualifiesForShadow = qualifiesForShadow;
