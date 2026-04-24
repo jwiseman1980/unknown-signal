@@ -552,13 +552,99 @@ select:focus-visible {
     line-height: 1.6;
   }
 
-  /* Combat HUD: more compact on mobile */
+  /* Combat HUD: single condensed row on mobile */
   .combat-hud {
-    font-size: 0.72rem;
+    font-size: 0.62rem;
+    padding: 3px 0;
   }
 
-  .hud-label {
-    width: 40px;
+  /* vitals row: HP and EN side-by-side */
+  .hud-vitals {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hud-vitals .hud-row {
+    flex: 1;
+    min-width: 0;
+    padding: 1px 0;
+    gap: 3px;
+  }
+
+  .hud-vitals .hud-label {
+    width: 16px;
+    font-size: 0.56rem;
+  }
+
+  .hud-vitals .hud-bar {
+    height: 4px;
+    min-width: 24px;
+  }
+
+  .hud-vitals .hud-value {
+    min-width: 30px;
+    font-size: 0.6rem;
+  }
+
+  /* skills toggle button */
+  .hud-skills-toggle {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.56rem;
+    font-family: inherit;
+    letter-spacing: 0.05em;
+    padding: 2px 5px;
+    cursor: pointer;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  /* combat status: enemy + RT side-by-side */
+  .hud-combat-status {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hud-combat-status .hud-row {
+    flex: 1;
+    min-width: 0;
+    padding: 1px 0;
+    gap: 4px;
+  }
+
+  .hud-combat-status .hud-bar {
+    height: 4px;
+  }
+
+  .hud-combat-status .hud-label {
+    width: auto;
+    max-width: 44px;
+    font-size: 0.56rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .hud-combat-status .hud-value {
+    font-size: 0.6rem;
+  }
+
+  /* skills row: hidden on mobile, shown on tap */
+  .hud-row--skills {
+    display: none;
+    padding: 1px 0;
+  }
+
+  .hud-row--skills.skills-open {
+    display: flex;
   }
 }
 
@@ -639,6 +725,17 @@ select:focus-visible {
   color: var(--muted);
   font-size: 0.68rem;
   letter-spacing: 0.06em;
+}
+
+/* Wrappers: transparent on desktop — children lay out as if unwrapped */
+.hud-vitals,
+.hud-combat-status {
+  display: contents;
+}
+
+/* Skills toggle button: mobile only */
+.hud-skills-toggle {
+  display: none;
 }
 
 /* ─────────────────────────────────────────────────────────────

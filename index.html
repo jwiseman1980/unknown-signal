@@ -111,26 +111,34 @@
         </section>
 
         <section id="combatHud" class="combat-hud hidden">
-          <div class="hud-row">
-            <span class="hud-label">HP</span>
-            <span id="hpBar" class="hud-bar"><span id="hpFill" class="hud-fill hud-fill--hp" style="width:100%"></span></span>
-            <span id="hpText" class="hud-value">100/100</span>
+          <!-- vitals: HP + EN side-by-side on mobile, stacked on desktop -->
+          <div class="hud-vitals">
+            <div class="hud-row">
+              <span class="hud-label">HP</span>
+              <span id="hpBar" class="hud-bar"><span id="hpFill" class="hud-fill hud-fill--hp" style="width:100%"></span></span>
+              <span id="hpText" class="hud-value">100/100</span>
+            </div>
+            <div class="hud-row">
+              <span class="hud-label">EN</span>
+              <span id="energyBar" class="hud-bar"><span id="energyFill" class="hud-fill hud-fill--energy" style="width:100%"></span></span>
+              <span id="energyText" class="hud-value">50/50</span>
+            </div>
+            <button id="skillsToggle" class="hud-skills-toggle" aria-expanded="false" aria-label="Toggle skills">SKL</button>
           </div>
-          <div class="hud-row">
-            <span class="hud-label">EN</span>
-            <span id="energyBar" class="hud-bar"><span id="energyFill" class="hud-fill hud-fill--energy" style="width:100%"></span></span>
-            <span id="energyText" class="hud-value">50/50</span>
+          <!-- combat status: enemy + RT, side-by-side on mobile -->
+          <div class="hud-combat-status">
+            <div id="enemyHudRow" class="hud-row hud-row--enemy hidden">
+              <span id="enemyName" class="hud-label">Enemy</span>
+              <span id="enemyBar" class="hud-bar"><span id="enemyFill" class="hud-fill hud-fill--enemy" style="width:100%"></span></span>
+              <span id="enemyHpText" class="hud-value">??/??</span>
+            </div>
+            <div id="roundtimeRow" class="hud-row hud-row--rt hidden">
+              <span class="hud-label">RT</span>
+              <span id="roundtimeText" class="hud-value hud-value--rt">0s</span>
+            </div>
           </div>
-          <div id="enemyHudRow" class="hud-row hud-row--enemy hidden">
-            <span id="enemyName" class="hud-label">Enemy</span>
-            <span id="enemyBar" class="hud-bar"><span id="enemyFill" class="hud-fill hud-fill--enemy" style="width:100%"></span></span>
-            <span id="enemyHpText" class="hud-value">??/??</span>
-          </div>
-          <div id="roundtimeRow" class="hud-row hud-row--rt hidden">
-            <span class="hud-label">RT</span>
-            <span id="roundtimeText" class="hud-value hud-value--rt">0s</span>
-          </div>
-          <div class="hud-row hud-row--skills">
+          <!-- skills: always visible on desktop, tap-to-expand on mobile -->
+          <div id="skillsRow" class="hud-row hud-row--skills">
             <span class="hud-label">Skills</span>
             <span id="skillsSummary" class="hud-value hud-value--skills">CMB:0 HCK:0 STL:0 MED:0 PRC:0</span>
           </div>

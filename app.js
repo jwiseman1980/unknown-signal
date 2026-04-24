@@ -12,6 +12,8 @@ const threadKeyInput = document.querySelector("#threadKeyInput");
 const switchThread = document.querySelector("#switchThread");
 const copyInvite = document.querySelector("#copyInvite");
 const copyLink = document.querySelector("#copyLink");
+const skillsToggle = document.querySelector("#skillsToggle");
+const skillsRow = document.querySelector("#skillsRow");
 const shareInvite = document.querySelector("#shareInvite");
 const signalInput = document.querySelector("#signalInput");
 const updateSignal = document.querySelector("#updateSignal");
@@ -403,6 +405,12 @@ voiceToggle.addEventListener("click", () => {
 
 identityToggle.addEventListener("click", () => {
   identityPanel.classList.toggle("hidden");
+});
+
+skillsToggle.addEventListener("click", () => {
+  const open = skillsRow.classList.toggle("skills-open");
+  skillsToggle.textContent = open ? "SKL\u25b4" : "SKL";
+  skillsToggle.setAttribute("aria-expanded", String(open));
 });
 
 copyThreadKey.addEventListener("click", async () => {
